@@ -1,0 +1,133 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Hero from "../components/Hero.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+
+const description = "Computer Vision & Edge AI Technical Lead building multimodal AI products end to end.";
+---
+
+<BaseLayout title="Yang Liu — AI Product Builder" description={description}>
+  <SiteHeader />
+  <main>
+    <Hero />
+
+    <section class="approach" id="how-i-build" aria-labelledby="approach-title">
+      <div class="approach-heading">
+        <span>HOW I BUILD</span>
+        <h2 id="approach-title">From model behavior to product experience and deployment.</h2>
+      </div>
+      <div class="principles">
+        <article>
+          <span>01</span>
+          <h3>Start with the experience</h3>
+          <p>Work backward from the interaction people need, then shape the system around it.</p>
+        </article>
+        <article>
+          <span>02</span>
+          <h3>Reduce uncertainty early</h3>
+          <p>Use focused experiments to expose model, latency, and integration risks before they compound.</p>
+        </article>
+        <article>
+          <span>03</span>
+          <h3>Build for the full path</h3>
+          <p>Connect architecture, testing, and deployment so the prototype can become a durable product.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Yang Liu · Boston, MA</span>
+    <a href="https://github.com/Jeoker" target="_blank" rel="noreferrer">GitHub ↗</a>
+  </footer>
+</BaseLayout>
+
+<style>
+  .approach {
+    width: min(calc(100% - 40px), var(--page-width));
+    margin: 0 auto 100px;
+    padding: 84px 0;
+    border-top: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 0.9fr 1.1fr;
+    gap: clamp(50px, 8vw, 120px);
+  }
+
+  .approach-heading > span {
+    color: var(--sage);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+  }
+
+  h2 {
+    max-width: 480px;
+    margin: 18px 0 0;
+    font-family: Manrope, sans-serif;
+    font-size: clamp(30px, 3.5vw, 44px);
+    line-height: 1.15;
+    letter-spacing: -0.045em;
+  }
+
+  .principles { display: grid; gap: 0; }
+
+  article {
+    position: relative;
+    padding: 24px 0 24px 48px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  article:first-child { padding-top: 0; }
+
+  article > span {
+    position: absolute;
+    top: 27px;
+    left: 0;
+    color: var(--water);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  article:first-child > span { top: 3px; }
+
+  h3 {
+    margin: 0;
+    font-family: Manrope, sans-serif;
+    font-size: 17px;
+    letter-spacing: -0.02em;
+  }
+
+  article p {
+    margin: 8px 0 0;
+    color: var(--ink-muted);
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  footer {
+    width: min(calc(100% - 40px), var(--page-width));
+    margin: 0 auto;
+    padding: 28px 0 34px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    color: var(--ink-muted);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  footer a:hover { color: var(--sage-deep); }
+
+  @media (max-width: 780px) {
+    .approach { grid-template-columns: 1fr; padding: 64px 0; }
+  }
+
+  @media (max-width: 640px) {
+    .approach, footer { width: min(calc(100% - 28px), var(--page-width)); }
+    article { padding-left: 38px; }
+  }
+</style>

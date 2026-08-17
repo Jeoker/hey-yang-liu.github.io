@@ -1,0 +1,14 @@
+:root {
+  --canvas: #f7faf8;
+  --surface: #ffffff;
+  --surface-soft: #edf7f2;
+  --sage: #4f8068;
+  --sage-deep: #365f4b;
+  --water: #6e9db2;
+  --apricot: #e9b98e;
+  --ink: #24332c;
+  --ink-muted: #627169;
+  --line: #dce7e1;
+  --shadow-soft: 0 20px 60px rgba(49, 79, 64, 0.1);
+  --page-width: 1180px;
+}

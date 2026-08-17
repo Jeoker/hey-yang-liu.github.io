@@ -1,0 +1,224 @@
+---
+import ArchitecturePreview from "./ArchitecturePreview.astro";
+---
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-copy">
+    <div class="availability">
+      <span aria-hidden="true"></span>
+      Building end-to-end AI products
+    </div>
+
+    <p class="name">Yang Liu</p>
+    <h1 id="hero-title">
+      Computer Vision &amp; Edge AI
+      <span>Technical Lead <i>·</i> AI Product Builder</span>
+    </h1>
+
+    <p class="intro">
+      I lead computer vision and edge AI systems into production, and build multimodal AI products end to end.
+    </p>
+
+    <div class="actions">
+      <a class="primary-action" href="https://github.com/Jeoker/meowsformer" target="_blank" rel="noreferrer">
+        Explore Meowsformer
+        <svg viewBox="0 0 18 18" aria-hidden="true">
+          <path d="M5 9h8m-3-3 3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </a>
+      <a class="secondary-action" href="#how-i-build">How I build</a>
+    </div>
+
+    <ul class="capabilities" aria-label="Core capabilities">
+      <li>System design</li>
+      <li>Real-time AI</li>
+      <li>Product delivery</li>
+    </ul>
+  </div>
+
+  <div class="hero-visual" id="featured-build">
+    <div class="visual-accent accent-one" aria-hidden="true"></div>
+    <div class="visual-accent accent-two" aria-hidden="true"></div>
+    <ArchitecturePreview />
+  </div>
+</section>
+
+<style>
+  .hero {
+    width: min(calc(100% - 40px), var(--page-width));
+    min-height: calc(100vh - 90px);
+    margin: 0 auto;
+    padding: 64px 0 84px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.04fr) minmax(400px, 0.96fr);
+    align-items: center;
+    gap: clamp(48px, 7vw, 105px);
+  }
+
+  .hero-copy { max-width: 650px; }
+
+  .availability {
+    width: fit-content;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 32px;
+    padding: 8px 12px;
+    border: 1px solid rgba(79, 128, 104, 0.18);
+    border-radius: 999px;
+    color: var(--sage-deep);
+    background: rgba(237, 247, 242, 0.72);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .availability span {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--sage);
+    box-shadow: 0 0 0 4px rgba(79, 128, 104, 0.12);
+  }
+
+  .name {
+    margin: 0 0 10px;
+    color: var(--sage);
+    font-family: Manrope, sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  h1 {
+    margin: 0;
+    font-family: Manrope, sans-serif;
+    font-size: clamp(43px, 5vw, 66px);
+    font-weight: 740;
+    line-height: 1.04;
+    letter-spacing: -0.055em;
+  }
+
+  h1 span {
+    display: block;
+    margin-top: 9px;
+    color: var(--ink-muted);
+    font-size: 0.55em;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.035em;
+  }
+
+  h1 i { padding: 0 4px; color: var(--apricot); font-style: normal; }
+
+  .intro {
+    max-width: 600px;
+    margin: 30px 0 0;
+    color: var(--ink-muted);
+    font-family: Manrope, sans-serif;
+    font-size: clamp(18px, 2vw, 21px);
+    line-height: 1.65;
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-top: 38px;
+  }
+
+  .primary-action, .secondary-action {
+    font-family: Manrope, sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .primary-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 19px;
+    border-radius: 12px;
+    color: #fff;
+    background: var(--sage-deep);
+    box-shadow: 0 12px 30px rgba(54, 95, 75, 0.2);
+    transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+  }
+
+  .primary-action:hover {
+    transform: translateY(-2px);
+    background: #2d523f;
+    box-shadow: 0 16px 36px rgba(54, 95, 75, 0.25);
+  }
+
+  .primary-action svg { width: 18px; transition: transform 180ms ease; }
+  .primary-action:hover svg { transform: translateX(3px); }
+
+  .secondary-action {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-muted);
+    transition: color 180ms ease, border-color 180ms ease;
+  }
+
+  .secondary-action:hover { color: var(--sage-deep); border-color: var(--sage); }
+
+  .capabilities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    margin: 44px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .capabilities li {
+    padding: 7px 9px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    color: var(--ink-muted);
+    background: rgba(255, 255, 255, 0.58);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .hero-visual { position: relative; }
+
+  .visual-accent { position: absolute; z-index: -1; border-radius: 50%; }
+
+  .accent-one {
+    width: 54px; height: 54px; top: -22px; right: 38px;
+    border: 1px solid rgba(110, 157, 178, 0.38);
+  }
+
+  .accent-two {
+    width: 14px; height: 14px; bottom: 45px; left: -25px;
+    background: rgba(233, 185, 142, 0.72);
+  }
+
+  @media (max-width: 960px) {
+    .hero {
+      min-height: auto;
+      padding-top: 70px;
+      grid-template-columns: 1fr;
+    }
+    .hero-copy { max-width: 720px; }
+    .hero-visual { width: min(100%, 600px); }
+  }
+
+  @media (max-width: 640px) {
+    .hero {
+      width: min(calc(100% - 28px), var(--page-width));
+      padding: 56px 0 64px;
+      gap: 64px;
+    }
+    .availability { margin-bottom: 24px; font-size: 9px; }
+    h1 { font-size: clamp(39px, 12vw, 52px); }
+    h1 span { font-size: 0.48em; }
+    .actions { align-items: flex-start; flex-direction: column; gap: 17px; }
+    .capabilities { margin-top: 34px; }
+  }
+</style>

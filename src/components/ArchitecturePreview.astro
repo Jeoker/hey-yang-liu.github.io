@@ -1,0 +1,222 @@
+<div class="architecture-card" aria-label="Meowsformer system flow preview">
+  <div class="card-header">
+    <div>
+      <span class="eyebrow">CURRENTLY BUILDING</span>
+      <h2>Meowsformer</h2>
+    </div>
+    <span class="live-dot"><i></i> Multimodal AI</span>
+  </div>
+
+  <div class="flow" role="img" aria-label="Voice input flows through streaming intelligence into expressive audio">
+    <span class="flow-line line-one" aria-hidden="true"></span>
+    <span class="flow-line line-two" aria-hidden="true"></span>
+    <span class="flow-line line-three" aria-hidden="true"></span>
+
+    <div class="node input-node">
+      <span class="node-icon sound-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span class="node-copy"><b>Voice input</b><small>Natural language</small></span>
+    </div>
+
+    <div class="node api-node">
+      <span class="node-icon wave-icon" aria-hidden="true">↝</span>
+      <span class="node-copy"><b>Streaming API</b><small>Real-time transport</small></span>
+    </div>
+
+    <div class="node brain-node">
+      <span class="node-icon sparkle-icon" aria-hidden="true">✦</span>
+      <span class="node-copy"><b>LLM + RAG</b><small>Meaning &amp; retrieval</small></span>
+    </div>
+
+    <div class="node output-node">
+      <span class="node-icon output-icon" aria-hidden="true">◒</span>
+      <span class="node-copy"><b>Audio synthesis</b><small>Expressive response</small></span>
+    </div>
+  </div>
+
+  <div class="card-footer">
+    <span>From product experience</span>
+    <span class="footer-rule"></span>
+    <span>to deployed system</span>
+  </div>
+</div>
+
+<style>
+  .architecture-card {
+    position: relative;
+    min-height: 500px;
+    overflow: hidden;
+    padding: 28px;
+    border: 1px solid rgba(79, 128, 104, 0.18);
+    border-radius: 18px;
+    background:
+      linear-gradient(rgba(79, 128, 104, 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79, 128, 104, 0.055) 1px, transparent 1px),
+      rgba(255, 255, 255, 0.82);
+    background-size: 26px 26px;
+    box-shadow: var(--shadow-soft);
+    isolation: isolate;
+  }
+
+  .architecture-card::before,
+  .architecture-card::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    border-radius: 999px;
+    filter: blur(2px);
+  }
+
+  .architecture-card::before {
+    width: 230px; height: 230px; top: 58px; right: -90px;
+    background: rgba(110, 157, 178, 0.14);
+  }
+
+  .architecture-card::after {
+    width: 190px; height: 190px; bottom: -80px; left: 65px;
+    background: rgba(233, 185, 142, 0.14);
+  }
+
+  .card-header, .card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .eyebrow, .live-dot, .card-footer, small { font-family: "JetBrains Mono", monospace; }
+
+  .eyebrow {
+    color: var(--sage);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+  }
+
+  h2 {
+    margin: 6px 0 0;
+    font-family: Manrope, sans-serif;
+    font-size: 24px;
+    letter-spacing: -0.04em;
+  }
+
+  .live-dot {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--ink-muted);
+    background: rgba(255, 255, 255, 0.76);
+    font-size: 9px;
+    text-transform: uppercase;
+  }
+
+  .live-dot i {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--sage);
+    box-shadow: 0 0 0 4px rgba(79, 128, 104, 0.12);
+  }
+
+  .flow { position: relative; height: 335px; margin: 18px 0 4px; }
+
+  .node {
+    position: absolute;
+    width: 190px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px;
+    border: 1px solid rgba(79, 128, 104, 0.18);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 12px 28px rgba(49, 79, 64, 0.09);
+    transition: transform 220ms ease, box-shadow 220ms ease;
+  }
+
+  .node:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 17px 34px rgba(49, 79, 64, 0.13);
+  }
+
+  .input-node { top: 20px; left: 0; }
+  .api-node { top: 115px; right: 0; }
+  .brain-node { top: 210px; left: 6px; }
+  .output-node { top: 255px; right: 0; }
+
+  .node-icon {
+    width: 38px; height: 38px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 11px;
+    color: var(--sage-deep);
+    background: var(--surface-soft);
+  }
+
+  .wave-icon { color: #527f94; background: #edf5f8; font-size: 24px; }
+  .sparkle-icon { color: #855f3e; background: #fbf2e9; }
+  .output-icon { color: #75566e; background: #f4edf3; font-size: 20px; }
+  .sound-icon { gap: 3px; }
+
+  .sound-icon i {
+    width: 2px;
+    border-radius: 4px;
+    background: currentColor;
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+
+  .sound-icon i:nth-child(1) { height: 9px; }
+  .sound-icon i:nth-child(2) { height: 19px; animation-delay: 0.15s; }
+  .sound-icon i:nth-child(3) { height: 14px; animation-delay: 0.3s; }
+  .sound-icon i:nth-child(4) { height: 7px; animation-delay: 0.45s; }
+
+  .node-copy { display: grid; gap: 4px; }
+  b { font-family: Manrope, sans-serif; font-size: 13px; }
+  small { color: var(--ink-muted); font-size: 9px; }
+
+  .flow-line {
+    position: absolute;
+    display: block;
+    height: 1px;
+    transform-origin: left center;
+    background: repeating-linear-gradient(90deg, var(--sage) 0 4px, transparent 4px 9px);
+    opacity: 0.52;
+  }
+
+  .flow-line::after {
+    content: "";
+    position: absolute;
+    right: -1px; top: -3px;
+    width: 7px; height: 7px;
+    border-top: 1px solid var(--sage);
+    border-right: 1px solid var(--sage);
+    transform: rotate(45deg);
+  }
+
+  .line-one { width: 155px; left: 150px; top: 75px; transform: rotate(24deg); }
+  .line-two { width: 165px; right: 135px; top: 175px; transform: rotate(155deg); }
+  .line-three { width: 142px; left: 162px; top: 257px; transform: rotate(15deg); }
+
+  .card-footer {
+    gap: 10px;
+    color: var(--ink-muted);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .footer-rule { height: 1px; flex: 1; background: var(--line); }
+
+  @keyframes pulse {
+    0%, 100% { transform: scaleY(0.55); opacity: 0.65; }
+    50% { transform: scaleY(1); opacity: 1; }
+  }
+
+  @media (max-width: 520px) {
+    .architecture-card { min-height: 470px; padding: 20px; }
+    .flow { height: 330px; }
+    .node { width: 165px; padding: 10px; }
+    .node-icon { width: 34px; height: 34px; }
+    .line-one { width: 105px; left: 140px; }
+    .line-two { width: 112px; right: 122px; }
+    .line-three { width: 100px; left: 142px; }
+  }
+</style>
