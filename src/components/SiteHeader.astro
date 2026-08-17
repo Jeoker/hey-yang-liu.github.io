@@ -1,0 +1,81 @@
+<header class="site-header">
+  <a class="brand" href="/" aria-label="Yang Liu home">
+    <span class="brand-mark" aria-hidden="true">YL</span>
+    <span>Yang Liu</span>
+  </a>
+
+  <nav aria-label="Primary navigation">
+    <a href="#featured-build">Work</a>
+    <a href="#how-i-build">Approach</a>
+    <a class="github-link" href="https://github.com/Jeoker" target="_blank" rel="noreferrer">
+      GitHub
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M5 3h8v8h-2V6.4L4.7 12.7l-1.4-1.4L9.6 5H5V3Z"></path>
+      </svg>
+    </a>
+  </nav>
+</header>
+
+<style>
+  .site-header {
+    width: min(calc(100% - 40px), var(--page-width));
+    margin: 0 auto;
+    padding: 24px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 11px;
+    font-family: Manrope, sans-serif;
+    font-weight: 750;
+    letter-spacing: -0.02em;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(79, 128, 104, 0.25);
+    border-radius: 11px;
+    color: var(--sage-deep);
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 8px 24px rgba(49, 79, 64, 0.08);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+  }
+
+  nav {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    color: var(--ink-muted);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  nav a { transition: color 180ms ease; }
+  nav a:hover { color: var(--ink); }
+
+  .github-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--sage-deep);
+  }
+
+  .github-link svg { width: 15px; fill: currentColor; }
+
+  @media (max-width: 640px) {
+    .site-header {
+      width: min(calc(100% - 28px), var(--page-width));
+      padding-top: 18px;
+    }
+    nav { gap: 16px; }
+    nav a:not(.github-link) { display: none; }
+  }
+</style>
