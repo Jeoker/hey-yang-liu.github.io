@@ -20,10 +20,9 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
         <small>Team training portal</small>
       </span>
     </a>
-
     <nav class="dragon-boat-nav" aria-label="训练系统导航">
       <a href={appPath}>本季训练</a>
-      <button type="button" disabled title="将在后续阶段实现">过往赛季</button>
+      <button type="button" disabled title="将在历史阶段实现">过往赛季</button>
       <a href={coachPath} aria-current="page">Coach Mode</a>
     </nav>
   </header>
@@ -43,17 +42,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       <form class="dragon-boat-login-form" data-login-form>
         <label for="coach-code">Coach Code</label>
         <div class="dragon-boat-login-row">
-          <input
-            id="coach-code"
-            name="coach_code"
-            type="password"
-            minlength="6"
-            maxlength="128"
-            autocomplete="off"
-            spellcheck="false"
-            required
-            data-coach-code
-          />
+          <input id="coach-code" name="coach_code" type="password" minlength="6" maxlength="128" autocomplete="off" spellcheck="false" required data-coach-code />
           <button type="submit" class="dragon-boat-primary-button" data-login-button>登录</button>
         </div>
       </form>
@@ -72,89 +61,158 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
 
       <div class="dragon-boat-panel-grid" data-panel-grid></div>
 
-      <section class="dragon-boat-connectivity-panel" aria-labelledby="protected-write-title">
-        <div>
-          <h3 id="protected-write-title">P0 受保护写入测试</h3>
-          <p>向系统审计日志写入一条无业务副作用的测试事件，用于验证当前 Coach 会话和写入链路。</p>
+      <section class="dragon-boat-management-console" aria-labelledby="season-management-title">
+        <div class="dragon-boat-section-heading">
+          <div>
+            <p class="dragon-boat-session-label">P1 管理流程</p>
+            <h3 id="season-management-title">赛季、名单与周训练</h3>
+          </div>
+          <button type="button" class="dragon-boat-secondary-button" data-refresh-button>刷新</button>
         </div>
-        <button type="button" class="dragon-boat-primary-button" data-write-button>执行测试写入</button>
-        <p class="dragon-boat-form-status" data-write-status aria-live="polite"></p>
+        <p class="dragon-boat-form-status" data-management-status aria-live="polite"></p>
+
+        <div class="dragon-boat-season-picker">
+          <label for="season-picker">当前查看</label>
+          <select id="season-picker" data-season-picker></select>
+        </div>
+
+        <details class="dragon-boat-management-block" data-create-season-details open>
+          <summary>建立新赛季草稿</summary>
+          <form class="dragon-boat-form-grid" data-create-season-form>
+            <label>赛季名称<input name="name" required maxlength="120" placeholder="例如 Fall 2026" /></label>
+            <label>开始日期<input name="start_date" type="date" required /></label>
+            <label>最后有效日<input name="end_date" type="date" required /></label>
+            <label>时区<input name="timezone" required value="America/New_York" /></label>
+            <button type="submit" class="dragon-boat-primary-button">保存草稿</button>
+          </form>
+        </details>
+
+        <section class="dragon-boat-management-block" data-season-detail hidden>
+          <div class="dragon-boat-section-heading">
+            <div>
+              <p class="dragon-boat-session-label" data-season-status></p>
+              <h3 data-season-title></h3>
+              <p data-season-meta></p>
+            </div>
+            <button type="button" class="dragon-boat-secondary-button" data-sync-button hidden>重新检查名单</button>
+          </div>
+          <p data-season-sync></p>
+        </section>
+
+        <section class="dragon-boat-management-block" data-binding-block hidden>
+          <h3>连接 Google Form 与响应表</h3>
+          <p>请先在 Google Forms 中把本季表单连接到响应 Spreadsheet，再粘贴 Form 编辑地址和 Spreadsheet 地址。系统不会替你改变 Form 的响应目标。</p>
+          <form class="dragon-boat-form-grid" data-binding-form>
+            <label class="dragon-boat-field-wide">Form 编辑地址或 ID<input name="form" required /></label>
+            <label class="dragon-boat-field-wide">响应 Spreadsheet 地址或 ID<input name="spreadsheet" required /></label>
+            <label>响应 Tab 名称<input name="response_sheet" required value="Form Responses 1" /></label>
+            <label>姓名列标题<input name="display_name_header" required placeholder="Display Name" /></label>
+            <div class="dragon-boat-button-row dragon-boat-field-wide">
+              <button type="submit" class="dragon-boat-secondary-button">检查连接</button>
+              <button type="button" class="dragon-boat-primary-button" data-initialize-button disabled>初始化并激活赛季</button>
+            </div>
+          </form>
+          <p class="dragon-boat-form-status" data-binding-status aria-live="polite"></p>
+        </section>
+
+        <section class="dragon-boat-management-block" data-active-season-block hidden>
+          <h3>默认训练模板</h3>
+          <p>每周草稿从当前模板生成。保存模板不会公开训练。</p>
+          <form data-template-form>
+            <div data-template-rows></div>
+            <div class="dragon-boat-button-row">
+              <button type="button" class="dragon-boat-secondary-button" data-add-template-button>增加一条模板</button>
+              <button type="submit" class="dragon-boat-primary-button">保存全部模板</button>
+            </div>
+          </form>
+
+          <div class="dragon-boat-divider"></div>
+          <h3>开放新一周</h3>
+          <form class="dragon-boat-inline-form" data-week-form>
+            <label>周一日期<input name="week_start_date" type="date" required /></label>
+            <button type="submit" class="dragon-boat-secondary-button">生成私有周草稿</button>
+          </form>
+          <div data-admin-week-list></div>
+
+          <div class="dragon-boat-divider"></div>
+          <h3>为已开放周增加单次训练</h3>
+          <form class="dragon-boat-form-grid" data-additional-form>
+            <label>所属周<select name="week_id" required data-additional-week></select></label>
+            <label>训练日期<input name="practice_date" type="date" required /></label>
+            <label>开始时间<input name="start_time" type="time" required /></label>
+            <label>结束时间<input name="end_time" type="time" required /></label>
+            <label>地点<input name="location" required /></label>
+            <label>完整地址<input name="address" required /></label>
+            <label class="dragon-boat-field-wide">地图链接（可选）<input name="map_url" type="url" /></label>
+            <button type="submit" class="dragon-boat-secondary-button">保存为私有加场草稿</button>
+          </form>
+        </section>
       </section>
+
+      <details class="dragon-boat-connectivity-panel">
+        <summary>P0 连接诊断</summary>
+        <p>这项测试只向系统审计日志写入一条无业务副作用的事件。</p>
+        <button type="button" class="dragon-boat-secondary-button" data-write-button>执行测试写入</button>
+        <p class="dragon-boat-form-status" data-write-status aria-live="polite"></p>
+      </details>
     </section>
 
-    <p class="dragon-boat-note">
-      Google 登录只用于维护原生 Form、Sheet 和 Apps Script；它不会代替 Coach Code 的网站管理会话。
-    </p>
+    <p class="dragon-boat-note">Google 登录只用于维护原生 Form、Sheet 和 Apps Script；它不会代替 Coach Code 的网站管理会话。</p>
   </main>
 </div>
 
 <script>
   import { DragonBoatApiClient, DragonBoatApiError, createRequestId } from "../lib/api-client.js";
-  import {
-    clearCoachSession,
-    isCoachSessionError,
-    loadCoachSession,
-    saveCoachSession
-  } from "../lib/coach-session.js";
+  import { clearCoachSession, isCoachSessionError, loadCoachSession, saveCoachSession } from "../lib/coach-session.js";
 
   const root = document.querySelector<HTMLElement>("[data-coach-mode-app]");
-  const loginPanel = root?.querySelector<HTMLElement>("[data-login-panel]");
-  const loginForm = root?.querySelector<HTMLFormElement>("[data-login-form]");
-  const codeInput = root?.querySelector<HTMLInputElement>("[data-coach-code]");
-  const loginButton = root?.querySelector<HTMLButtonElement>("[data-login-button]");
-  const loginStatus = root?.querySelector<HTMLElement>("[data-login-status]");
-  const workspace = root?.querySelector<HTMLElement>("[data-workspace]");
-  const coachName = root?.querySelector<HTMLElement>("[data-coach-name]");
-  const sessionExpiry = root?.querySelector<HTMLElement>("[data-session-expiry]");
-  const panelGrid = root?.querySelector<HTMLElement>("[data-panel-grid]");
-  const logoutButton = root?.querySelector<HTMLButtonElement>("[data-logout-button]");
-  const writeButton = root?.querySelector<HTMLButtonElement>("[data-write-button]");
-  const writeStatus = root?.querySelector<HTMLElement>("[data-write-status]");
+  const q = <T extends HTMLElement>(selector: string) => root?.querySelector<T>(selector) || null;
+  const loginPanel = q<HTMLElement>("[data-login-panel]");
+  const loginForm = q<HTMLFormElement>("[data-login-form]");
+  const codeInput = q<HTMLInputElement>("[data-coach-code]");
+  const loginButton = q<HTMLButtonElement>("[data-login-button]");
+  const loginStatus = q<HTMLElement>("[data-login-status]");
+  const workspace = q<HTMLElement>("[data-workspace]");
+  const coachName = q<HTMLElement>("[data-coach-name]");
+  const sessionExpiry = q<HTMLElement>("[data-session-expiry]");
+  const panelGrid = q<HTMLElement>("[data-panel-grid]");
+  const logoutButton = q<HTMLButtonElement>("[data-logout-button]");
+  const refreshButton = q<HTMLButtonElement>("[data-refresh-button]");
+  const managementStatus = q<HTMLElement>("[data-management-status]");
+  const seasonPicker = q<HTMLSelectElement>("[data-season-picker]");
+  const createSeasonForm = q<HTMLFormElement>("[data-create-season-form]");
+  const createSeasonDetails = q<HTMLDetailsElement>("[data-create-season-details]");
+  const seasonDetail = q<HTMLElement>("[data-season-detail]");
+  const seasonStatus = q<HTMLElement>("[data-season-status]");
+  const seasonTitle = q<HTMLElement>("[data-season-title]");
+  const seasonMeta = q<HTMLElement>("[data-season-meta]");
+  const seasonSync = q<HTMLElement>("[data-season-sync]");
+  const syncButton = q<HTMLButtonElement>("[data-sync-button]");
+  const bindingBlock = q<HTMLElement>("[data-binding-block]");
+  const bindingForm = q<HTMLFormElement>("[data-binding-form]");
+  const bindingStatus = q<HTMLElement>("[data-binding-status]");
+  const initializeButton = q<HTMLButtonElement>("[data-initialize-button]");
+  const activeSeasonBlock = q<HTMLElement>("[data-active-season-block]");
+  const templateForm = q<HTMLFormElement>("[data-template-form]");
+  const templateRows = q<HTMLElement>("[data-template-rows]");
+  const addTemplateButton = q<HTMLButtonElement>("[data-add-template-button]");
+  const weekForm = q<HTMLFormElement>("[data-week-form]");
+  const adminWeekList = q<HTMLElement>("[data-admin-week-list]");
+  const additionalForm = q<HTMLFormElement>("[data-additional-form]");
+  const additionalWeek = q<HTMLSelectElement>("[data-additional-week]");
+  const writeButton = q<HTMLButtonElement>("[data-write-button]");
+  const writeStatus = q<HTMLElement>("[data-write-status]");
   const apiUrl = root?.getAttribute("data-api-url")?.trim() || "";
   const client = apiUrl ? new DragonBoatApiClient({ baseUrl: apiUrl }) : null;
+  const pendingRequests = new Map<string, string>();
   let sessionToken = "";
-  let pendingWriteRequestId: string | null = null;
+  let currentSeasonData: any = null;
+  let bindingValidated = false;
 
-  function setStatus(element: HTMLElement | null | undefined, message: string, state = "") {
+  function setStatus(element: HTMLElement | null, message: string, state = "") {
     if (!element) return;
     element.textContent = message;
     element.dataset.state = state;
-  }
-
-  function setLoginBusy(busy: boolean) {
-    if (loginButton) loginButton.disabled = busy || !client;
-    if (codeInput) codeInput.disabled = busy || !client;
-  }
-
-  function showLogin(message = "") {
-    sessionToken = "";
-    if (loginPanel) loginPanel.hidden = false;
-    if (workspace) workspace.hidden = true;
-    if (panelGrid) panelGrid.replaceChildren();
-    if (writeStatus) setStatus(writeStatus, "");
-    setStatus(loginStatus, message, message ? "error" : "");
-    setLoginBusy(false);
-  }
-
-  function showWorkspace(data: any) {
-    if (loginPanel) loginPanel.hidden = true;
-    if (workspace) workspace.hidden = false;
-    if (coachName) coachName.textContent = data.coach.display_name;
-    if (sessionExpiry) {
-      sessionExpiry.textContent = `会话有效至 ${new Date(data.session.expires_at).toLocaleString()}`;
-    }
-    if (panelGrid) {
-      panelGrid.replaceChildren(...data.panels.map((panel: any) => {
-        const card = document.createElement("section");
-        card.className = "dragon-boat-panel-card";
-        const title = document.createElement("h3");
-        title.textContent = panel.label;
-        const status = document.createElement("p");
-        status.textContent = panel.available ? "可用" : "将在后续阶段接入";
-        card.append(title, status);
-        return card;
-      }));
-    }
   }
 
   function messageForError(error: unknown) {
@@ -165,20 +223,286 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       SESSION_EXPIRED: "管理会话已过期，请重新输入 Coach Code。",
       SESSION_REVOKED: "这次管理会话已经失效，请重新登录。",
       SESSION_INVALID: "无法验证管理会话，请重新登录。",
-      CONFIGURATION_REQUIRED: "后端尚未完成 Coach Mode 配置。",
-      CONFIGURATION_ERROR: "后端管理数据配置有误。",
-      SERVICE_BUSY: "系统正在处理其他修改，请使用同一请求重试。",
+      VERSION_CONFLICT: "数据已被其他管理员修改，请刷新后重试。",
+      BINDING_DESTINATION_MISMATCH: "这个 Form 没有连接到所填的响应 Spreadsheet。",
+      BINDING_RESPONSE_TAB_MISMATCH: "所选响应 Tab 不属于这个 Form。",
+      BINDING_FIELD_MISSING: "响应 Tab 中找不到所填的姓名列标题。",
+      BINDING_FIELD_AMBIGUOUS: "姓名列标题重复，请先修正响应表。",
+      BINDING_SCHEMA_CHANGED: "响应表的列结构已经改变，请检查后再同步。",
+      BINDING_LOCKED: "赛季已经激活，不能替换它的表单绑定。",
+      WEEK_START_NOT_MONDAY: "请选择一个周一作为本周起点。",
+      SCHEDULE_TEMPLATES_REQUIRED: "请先保存至少一条默认训练模板。",
+      SERVICE_BUSY: "系统正在处理其他修改，请稍后使用同一请求重试。",
       NETWORK_ERROR: "暂时无法连接训练服务。",
-      REQUEST_TIMEOUT: "请求超时；系统会保留同一请求编号供重试。"
+      REQUEST_TIMEOUT: "请求超时；再次点击会沿用同一请求编号确认结果。"
     };
-    return messages[code] || "操作没有完成，请稍后重试。";
+    return messages[code] || (error instanceof Error ? error.message : "操作没有完成，请稍后重试。");
   }
 
-  async function bootstrap(token: string) {
-    if (!client) return;
-    const response = await client.post("coachBootstrap", { session_token: token });
-    sessionToken = token;
-    showWorkspace(response.data);
+  function showLogin(message = "", state = "error") {
+    sessionToken = "";
+    currentSeasonData = null;
+    if (loginPanel) loginPanel.hidden = false;
+    if (workspace) workspace.hidden = true;
+    if (panelGrid) panelGrid.replaceChildren();
+    setStatus(loginStatus, message, message ? state : "");
+    if (loginButton) loginButton.disabled = !client;
+    if (codeInput) codeInput.disabled = !client;
+  }
+
+  function protectedError(error: unknown) {
+    if (isCoachSessionError(error)) {
+      clearCoachSession();
+      showLogin(messageForError(error));
+      return true;
+    }
+    return false;
+  }
+
+  async function managedPost(action: string, payload: Record<string, unknown>, key: string) {
+    if (!client || !sessionToken) throw new Error("Coach Mode is not connected.");
+    const requestId = pendingRequests.get(key) || createRequestId();
+    pendingRequests.set(key, requestId);
+    try {
+      const response = await client.post(action, { session_token: sessionToken, ...payload }, { requestId });
+      pendingRequests.delete(key);
+      return response;
+    } catch (error) {
+      if (!(error instanceof DragonBoatApiError) || !error.retryable) pendingRequests.delete(key);
+      throw error;
+    }
+  }
+
+  function formObject(form: HTMLFormElement) {
+    return Object.fromEntries(new FormData(form).entries());
+  }
+
+  function renderPanels(panels: any[]) {
+    if (!panelGrid) return;
+    panelGrid.replaceChildren(...panels.map((panel) => {
+      const card = document.createElement("section");
+      card.className = "dragon-boat-panel-card";
+      const title = document.createElement("h3");
+      title.textContent = panel.label;
+      const status = document.createElement("p");
+      status.textContent = panel.available ? "P1 功能已接入" : "将在后续阶段接入";
+      card.append(title, status);
+      return card;
+    }));
+  }
+
+  async function refreshBootstrap(preferredSeasonId = "") {
+    if (!client || !sessionToken) return;
+    const response = await client.post("coachBootstrap", { session_token: sessionToken });
+    renderPanels(response.data.panels);
+    if (coachName) coachName.textContent = response.data.coach.display_name;
+    if (sessionExpiry) sessionExpiry.textContent = `会话有效至 ${new Date(response.data.session.expires_at).toLocaleString()}`;
+    if (seasonPicker) {
+      const current = preferredSeasonId || seasonPicker.value || response.data.default_season_id || response.data.seasons[0]?.season_id || "";
+      seasonPicker.replaceChildren();
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = response.data.seasons.length ? "选择一个赛季" : "尚无赛季";
+      seasonPicker.append(empty);
+      response.data.seasons.forEach((season: any) => {
+        const option = document.createElement("option");
+        option.value = season.season_id;
+        option.textContent = `${season.name} · ${season.status}${season.season_id === response.data.default_season_id ? " · 首页默认" : ""}`;
+        seasonPicker.append(option);
+      });
+      seasonPicker.value = current;
+      if (current) await loadSeason(current);
+      else clearSeasonView();
+    }
+  }
+
+  function clearSeasonView() {
+    currentSeasonData = null;
+    if (seasonDetail) seasonDetail.hidden = true;
+    if (bindingBlock) bindingBlock.hidden = true;
+    if (activeSeasonBlock) activeSeasonBlock.hidden = true;
+  }
+
+  async function loadSeason(seasonId: string) {
+    if (!client || !sessionToken || !seasonId) return clearSeasonView();
+    setStatus(managementStatus, "正在读取赛季……", "pending");
+    try {
+      const response = await client.post("getSeasonManagement", { session_token: sessionToken, season_id: seasonId });
+      currentSeasonData = response.data;
+      renderSeason();
+      setStatus(managementStatus, "");
+    } catch (error) {
+      if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
+    }
+  }
+
+  function renderSeason() {
+    if (!currentSeasonData) return clearSeasonView();
+    const season = currentSeasonData.season;
+    if (seasonDetail) seasonDetail.hidden = false;
+    if (seasonStatus) seasonStatus.textContent = `${season.status}${currentSeasonData.is_default ? " · 首页默认" : ""}`;
+    if (seasonTitle) seasonTitle.textContent = season.name;
+    if (seasonMeta) seasonMeta.textContent = `${season.start_date} 至 ${season.end_date} · ${season.timezone} · version ${season.season_version}`;
+    if (seasonSync) seasonSync.textContent = season.status === "OPEN"
+      ? `${currentSeasonData.members.length} 名队员 · 名单版本 ${season.roster_version} · 最近同步 ${season.last_sync_at ? new Date(season.last_sync_at).toLocaleString() : "尚无"}`
+      : "连接完成后会自动激活赛季并导入已有回答。";
+    if (syncButton) syncButton.hidden = season.status !== "OPEN";
+    if (bindingBlock) bindingBlock.hidden = season.status !== "DRAFT";
+    if (activeSeasonBlock) activeSeasonBlock.hidden = season.status !== "OPEN";
+    bindingValidated = false;
+    if (initializeButton) initializeButton.disabled = true;
+    setStatus(bindingStatus, "");
+    if (season.status === "OPEN") {
+      renderTemplates(currentSeasonData.templates);
+      renderAdminWeeks(currentSeasonData.weeks);
+    }
+  }
+
+  function addTemplateRow(template: any = {}) {
+    if (!templateRows) return;
+    const row = document.createElement("div");
+    row.className = "dragon-boat-template-row";
+    const fields = [
+      ["day_of_week", "星期", "select"],
+      ["start_time", "开始", "time"],
+      ["end_time", "结束", "time"],
+      ["location", "地点", "text"],
+      ["address", "地址", "text"],
+      ["map_url", "地图链接", "url"]
+    ];
+    fields.forEach(([name, labelText, type]) => {
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      let input: HTMLInputElement | HTMLSelectElement;
+      if (type === "select") {
+        input = document.createElement("select");
+        ["周一", "周二", "周三", "周四", "周五", "周六", "周日"].forEach((label, index) => {
+          const option = document.createElement("option");
+          option.value = String(index + 1);
+          option.textContent = label;
+          input.append(option);
+        });
+      } else {
+        input = document.createElement("input");
+        input.type = type;
+      }
+      input.name = name;
+      input.required = name !== "map_url";
+      input.value = String(template[name] || (name === "day_of_week" ? 3 : ""));
+      label.append(input);
+      row.append(label);
+    });
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "dragon-boat-text-button";
+    remove.textContent = "移除";
+    remove.addEventListener("click", () => row.remove());
+    row.append(remove);
+    templateRows.append(row);
+  }
+
+  function renderTemplates(templates: any[]) {
+    if (!templateRows) return;
+    templateRows.replaceChildren();
+    if (templates.length) templates.forEach(addTemplateRow);
+    else {
+      addTemplateRow({ day_of_week: 3, start_time: "18:00", end_time: "20:00" });
+      addTemplateRow({ day_of_week: 6, start_time: "10:00", end_time: "12:00" });
+    }
+  }
+
+  function renderAdminWeeks(weeks: any[]) {
+    if (!adminWeekList || !additionalWeek) return;
+    adminWeekList.replaceChildren();
+    additionalWeek.replaceChildren();
+    const openedWeeks = weeks.filter((item) => item.week.status === "OPENED");
+    if (!weeks.length) {
+      const empty = document.createElement("p");
+      empty.className = "dragon-boat-empty-state";
+      empty.textContent = "尚未生成周草稿。";
+      adminWeekList.append(empty);
+    }
+    weeks.forEach((item) => {
+      const card = document.createElement("section");
+      card.className = "dragon-boat-admin-week-card";
+      const heading = document.createElement("div");
+      heading.className = "dragon-boat-section-heading";
+      const title = document.createElement("h4");
+      title.textContent = `${item.week.week_start_date} · ${item.week.status} · v${item.week.week_version}`;
+      heading.append(title);
+      if (item.week.status === "DRAFT") {
+        const publish = document.createElement("button");
+        publish.type = "button";
+        publish.className = "dragon-boat-primary-button";
+        publish.textContent = "确认并立即开放整周";
+        publish.addEventListener("click", () => confirmWeek(item.week));
+        heading.append(publish);
+      }
+      const practices = document.createElement("ul");
+      item.practices.forEach((practice: any) => {
+        const line = document.createElement("li");
+        const text = document.createElement("span");
+        text.textContent = `${new Date(practice.start_at).toLocaleString()} · ${practice.location} · ${practice.schedule_published_at ? "已公开" : "私有草稿"}`;
+        line.append(text);
+        if (item.week.status === "OPENED" && !practice.schedule_published_at) {
+          const publish = document.createElement("button");
+          publish.type = "button";
+          publish.className = "dragon-boat-text-button";
+          publish.textContent = "单独发布这次加场";
+          publish.addEventListener("click", () => publishAdditional(item.week, practice));
+          line.append(publish);
+        }
+        practices.append(line);
+      });
+      card.append(heading, practices);
+      adminWeekList.append(card);
+    });
+    openedWeeks.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.week.week_id;
+      option.textContent = item.week.week_start_date;
+      option.dataset.weekVersion = String(item.week.week_version);
+      additionalWeek.append(option);
+    });
+    if (additionalForm) {
+      additionalForm.querySelectorAll("input, select, button").forEach((control: any) => {
+        control.disabled = !openedWeeks.length;
+      });
+    }
+  }
+
+  async function confirmWeek(week: any) {
+    if (!currentSeasonData) return;
+    setStatus(managementStatus, "正在确认并开放整周……", "pending");
+    try {
+      await managedPost("confirmTrainingWeek", {
+        season_id: currentSeasonData.season.season_id,
+        week_id: week.week_id,
+        week_version: week.week_version
+      }, `confirm:${week.week_id}:${week.week_version}`);
+      await loadSeason(currentSeasonData.season.season_id);
+      setStatus(managementStatus, "整周训练已经正式开放。", "ready");
+    } catch (error) {
+      if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
+    }
+  }
+
+  async function publishAdditional(week: any, practice: any) {
+    if (!currentSeasonData) return;
+    setStatus(managementStatus, "正在单独发布加场……", "pending");
+    try {
+      await managedPost("publishAdditionalPractice", {
+        season_id: currentSeasonData.season.season_id,
+        week_id: week.week_id,
+        practice_id: practice.practice_id,
+        week_version: week.week_version,
+        practice_version: practice.practice_version
+      }, `publish-additional:${practice.practice_id}:${practice.practice_version}`);
+      await loadSeason(currentSeasonData.season.season_id);
+      setStatus(managementStatus, "这次加场已经单独发布，其他草稿没有公开。", "ready");
+    } catch (error) {
+      if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
+    }
   }
 
   loginForm?.addEventListener("submit", async (event) => {
@@ -186,26 +510,28 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     if (!client || !codeInput) return;
     const coachCode = codeInput.value;
     codeInput.value = "";
-    setLoginBusy(true);
+    if (loginButton) loginButton.disabled = true;
     setStatus(loginStatus, "正在验证……", "pending");
     try {
       const response = await client.post("coachLogin", { coach_code: coachCode });
       sessionToken = response.data.session_token;
       saveCoachSession(sessionToken, response.data.session);
-      await bootstrap(sessionToken);
+      if (loginPanel) loginPanel.hidden = true;
+      if (workspace) workspace.hidden = false;
+      await refreshBootstrap();
       setStatus(loginStatus, "");
     } catch (error) {
       clearCoachSession();
       showLogin(messageForError(error));
     } finally {
-      setLoginBusy(false);
+      if (loginButton) loginButton.disabled = false;
     }
   });
 
   logoutButton?.addEventListener("click", async () => {
     const token = sessionToken;
     clearCoachSession();
-    showLogin("本机已退出 Coach Mode。");
+    showLogin("本机已退出 Coach Mode。", "ready");
     if (!client || !token) return;
     try {
       await client.post("coachLogout", { session_token: token });
@@ -215,45 +541,175 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     }
   });
 
+  refreshButton?.addEventListener("click", () => refreshBootstrap(seasonPicker?.value).catch((error) => {
+    if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
+  }));
+  seasonPicker?.addEventListener("change", () => loadSeason(seasonPicker.value));
+
+  createSeasonForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setStatus(managementStatus, "正在建立赛季草稿……", "pending");
+    try {
+      const response = await managedPost("createSeason", formObject(createSeasonForm), "create-season");
+      createSeasonForm.reset();
+      const timezone = createSeasonForm.elements.namedItem("timezone") as HTMLInputElement;
+      if (timezone) timezone.value = "America/New_York";
+      if (createSeasonDetails) createSeasonDetails.open = false;
+      await refreshBootstrap(response.data.season.season_id);
+      setStatus(managementStatus, "赛季草稿已建立。请继续检查 Form 和响应表连接。", "ready");
+    } catch (error) {
+      if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
+    }
+  });
+
+  bindingForm?.addEventListener("input", () => {
+    bindingValidated = false;
+    if (initializeButton) initializeButton.disabled = true;
+  });
+  bindingForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!client || !sessionToken || !currentSeasonData) return;
+    setStatus(bindingStatus, "正在只读检查 Form、响应目标、Tab 和姓名列……", "pending");
+    try {
+      const response = await client.post("validateSeasonBinding", {
+        session_token: sessionToken,
+        season_id: currentSeasonData.season.season_id,
+        ...formObject(bindingForm)
+      });
+      bindingValidated = true;
+      if (initializeButton) initializeButton.disabled = false;
+      const preview = response.data.preview_names.length ? `；预览：${response.data.preview_names.join("、")}` : "";
+      setStatus(bindingStatus, `连接检查通过，共有 ${response.data.response_count} 条现有回答${preview}。`, "ready");
+    } catch (error) {
+      bindingValidated = false;
+      if (initializeButton) initializeButton.disabled = true;
+      if (!protectedError(error)) setStatus(bindingStatus, messageForError(error), "error");
+    }
+  });
+  initializeButton?.addEventListener("click", async () => {
+    if (!bindingValidated || !bindingForm || !currentSeasonData) return;
+    setStatus(bindingStatus, "正在建立系统 Tab、导入名单并安装同步触发器……", "pending");
+    try {
+      const season = currentSeasonData.season;
+      const response = await managedPost("initializeSeason", {
+        season_id: season.season_id,
+        season_version: season.season_version,
+        ...formObject(bindingForm)
+      }, `initialize:${season.season_id}:${season.season_version}`);
+      await refreshBootstrap(response.data.season.season_id);
+      setStatus(managementStatus, `赛季已自动激活，导入 ${response.data.sync.imported_count} 名队员。`, "ready");
+    } catch (error) {
+      if (!protectedError(error)) setStatus(bindingStatus, messageForError(error), "error");
+    }
+  });
+
+  syncButton?.addEventListener("click", async () => {
+    if (!currentSeasonData) return;
+    setStatus(managementStatus, "正在检查新的表单回答……", "pending");
+    try {
+      const seasonId = currentSeasonData.season.season_id;
+      const response = await managedPost("retrySeasonSync", { season_id: seasonId }, `sync:${seasonId}`);
+      await loadSeason(seasonId);
+      setStatus(managementStatus, `同步完成，新增 ${response.data.sync.imported_count} 名队员。`, "ready");
+    } catch (error) {
+      if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
+    }
+  });
+
+  addTemplateButton?.addEventListener("click", () => addTemplateRow());
+  templateForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!currentSeasonData || !templateRows) return;
+    const templates = [...templateRows.querySelectorAll<HTMLElement>(".dragon-boat-template-row")].map((row) => {
+      const values: Record<string, string | number> = {};
+      row.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input, select").forEach((input) => {
+        values[input.name] = input.name === "day_of_week" ? Number(input.value) : input.value;
+      });
+      return values;
+    });
+    setStatus(managementStatus, "正在保存默认模板……", "pending");
+    try {
+      const season = currentSeasonData.season;
+      await managedPost("updateScheduleTemplates", {
+        season_id: season.season_id,
+        season_version: season.season_version,
+        templates
+      }, `templates:${season.season_id}:${season.season_version}`);
+      await loadSeason(season.season_id);
+      setStatus(managementStatus, "默认训练模板已保存；尚未公开任何训练。", "ready");
+    } catch (error) {
+      if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
+    }
+  });
+
+  weekForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!currentSeasonData) return;
+    const season = currentSeasonData.season;
+    setStatus(managementStatus, "正在从模板生成私有周草稿……", "pending");
+    try {
+      await managedPost("updateTrainingWeek", {
+        season_id: season.season_id,
+        season_version: season.season_version,
+        ...formObject(weekForm)
+      }, `week:${season.season_id}:${(weekForm.elements.namedItem("week_start_date") as HTMLInputElement).value}`);
+      await loadSeason(season.season_id);
+      setStatus(managementStatus, "周草稿已生成，队员页面仍不可见。检查后再确认开放。", "ready");
+    } catch (error) {
+      if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
+    }
+  });
+
+  additionalForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!currentSeasonData || !additionalWeek) return;
+    const option = additionalWeek.selectedOptions[0];
+    if (!option) return;
+    const season = currentSeasonData.season;
+    setStatus(managementStatus, "正在保存私有加场草稿……", "pending");
+    try {
+      await managedPost("createPractice", {
+        season_id: season.season_id,
+        week_id: option.value,
+        week_version: Number(option.dataset.weekVersion),
+        ...formObject(additionalForm)
+      }, `additional:${season.season_id}:${option.value}`);
+      additionalForm.reset();
+      await loadSeason(season.season_id);
+      setStatus(managementStatus, "加场草稿已保存，尚未公开。请在对应周中单独发布。", "ready");
+    } catch (error) {
+      if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
+    }
+  });
+
   writeButton?.addEventListener("click", async () => {
-    if (!client || !sessionToken || !writeButton) return;
-    pendingWriteRequestId ||= createRequestId();
+    if (!writeButton) return;
     writeButton.disabled = true;
     setStatus(writeStatus, "正在验证受保护写入……", "pending");
     try {
-      const response = await client.post(
-        "coachConnectivityWrite",
-        { session_token: sessionToken },
-        { requestId: pendingWriteRequestId }
-      );
+      const response = await managedPost("coachConnectivityWrite", {}, "p0-connectivity");
       setStatus(writeStatus, `写入成功：${response.data.write_id}`, "ready");
-      pendingWriteRequestId = null;
     } catch (error) {
-      if (isCoachSessionError(error)) {
-        clearCoachSession();
-        showLogin(messageForError(error));
-      } else {
-        setStatus(writeStatus, messageForError(error), "error");
-        if (!(error instanceof DragonBoatApiError) || !error.retryable) {
-          pendingWriteRequestId = null;
-        }
-      }
+      if (!protectedError(error)) setStatus(writeStatus, messageForError(error), "error");
     } finally {
       writeButton.disabled = false;
     }
   });
 
-  if (!client) {
-    showLogin("等待配置测试 Apps Script Web App 地址后即可登录。");
-  } else {
+  async function restoreSession() {
+    if (!client) return showLogin("等待配置 Apps Script Web App 地址后即可登录。", "pending");
     const stored = loadCoachSession();
-    if (stored) {
-      bootstrap(stored.token).catch((error) => {
-        clearCoachSession();
-        showLogin(messageForError(error));
-      });
-    } else {
-      showLogin();
+    if (!stored) return showLogin();
+    sessionToken = stored.token;
+    try {
+      if (loginPanel) loginPanel.hidden = true;
+      if (workspace) workspace.hidden = false;
+      await refreshBootstrap();
+    } catch (error) {
+      clearCoachSession();
+      showLogin(messageForError(error));
     }
   }
+
+  restoreSession();
 </script>

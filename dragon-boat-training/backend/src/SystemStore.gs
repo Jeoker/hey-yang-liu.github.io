@@ -215,6 +215,12 @@ function readSystemRequestResult_(record) {
   }
 }
 
+function setSystemRequestResult_(record, result) {
+  record.result_json = JSON.stringify(result);
+  updateSheetRecord_("SystemRequests", record);
+  return result;
+}
+
 function deterministicEventId_(requestRecord, suffix) {
   var secret = getRequiredScriptProperty_(DRAGON_BOAT_PROPERTY_KEYS_.CODE_SECRET);
   return "evt_" + hmacDigest_(requestRecord.request_key + "\n" + suffix, secret).slice(0, 40);

@@ -13,7 +13,7 @@ function handleDragonBoatRequest_(method, event) {
     var request = parseDragonBoatRequest_(method, event);
     requestId = request.request_id;
 
-    if (method === "GET" && request.action !== "health") {
+    if (method === "GET" && ["health", "bootstrap", "members"].indexOf(request.action) < 0) {
       throw dragonBoatRequestError_(
         "METHOD_NOT_ALLOWED",
         "This action must be sent as a POST request."
@@ -23,6 +23,10 @@ function handleDragonBoatRequest_(method, event) {
     switch (request.action) {
       case "health":
         return dragonBoatSuccess_(dragonBoatHealth_(), requestId);
+      case "bootstrap":
+        return dragonBoatSuccess_(publicBootstrap_(request), requestId);
+      case "members":
+        return dragonBoatSuccess_(publicMembers_(request), requestId);
       case "coachLogin":
         return dragonBoatSuccess_(coachLogin_(request), requestId);
       case "coachLogout":
@@ -31,6 +35,28 @@ function handleDragonBoatRequest_(method, event) {
         return dragonBoatSuccess_(coachBootstrap_(request), requestId);
       case "coachConnectivityWrite":
         return dragonBoatSuccess_(coachConnectivityWrite_(request), requestId);
+      case "getSeasonManagement":
+        return dragonBoatSuccess_(getSeasonManagement_(request), requestId);
+      case "createSeason":
+        return dragonBoatSuccess_(createSeason_(request), requestId);
+      case "validateSeasonBinding":
+        return dragonBoatSuccess_(validateSeasonBindingAction_(request), requestId);
+      case "initializeSeason":
+        return dragonBoatSuccess_(initializeSeason_(request), requestId);
+      case "retrySeasonSync":
+        return dragonBoatSuccess_(retrySeasonSync_(request), requestId);
+      case "updateScheduleTemplates":
+        return dragonBoatSuccess_(updateScheduleTemplates_(request), requestId);
+      case "updateTrainingWeek":
+        return dragonBoatSuccess_(updateTrainingWeek_(request), requestId);
+      case "confirmTrainingWeek":
+        return dragonBoatSuccess_(confirmTrainingWeek_(request), requestId);
+      case "publishTrainingWeek":
+        return dragonBoatSuccess_(publishTrainingWeek_(request), requestId);
+      case "createPractice":
+        return dragonBoatSuccess_(createPractice_(request), requestId);
+      case "publishAdditionalPractice":
+        return dragonBoatSuccess_(publishAdditionalPractice_(request), requestId);
       default:
         throw dragonBoatRequestError_(
           "UNSUPPORTED_ACTION",

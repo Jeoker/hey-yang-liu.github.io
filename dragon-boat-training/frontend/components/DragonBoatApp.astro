@@ -23,77 +23,212 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
 
     <nav class="dragon-boat-nav" aria-label="训练系统导航">
       <a href={appPath} aria-current="page">本季训练</a>
-      <button type="button" disabled title="将在后续阶段实现">过往赛季</button>
+      <button type="button" disabled title="将在历史阶段实现">过往赛季</button>
       <a href={coachPath}>Coach Mode</a>
     </nav>
   </header>
 
   <main class="dragon-boat-main dragon-boat-shell">
-    <p class="dragon-boat-kicker">P0 连接验证</p>
-    <h1>训练系统基础连接</h1>
-    <p class="dragon-boat-lede">
-      当前页面只验证 GitHub Pages 与 Apps Script 的版本化连接。赛季、报名和管理员功能会按 Epic 顺序逐段接入。
+    <p class="dragon-boat-kicker">本季训练</p>
+    <h1 data-page-title>正在读取本季安排</h1>
+    <p class="dragon-boat-lede" data-page-lede>
+      网站正在读取已发布的训练计划。未经过管理员确认的草稿不会显示在这里。
     </p>
 
-    <section class="dragon-boat-status-card" aria-labelledby="service-status-title" aria-live="polite">
+    <section class="dragon-boat-status-card" data-loading-card aria-live="polite">
       <div class="dragon-boat-status-heading">
-        <h2 id="service-status-title">后端服务</h2>
+        <h2>训练服务</h2>
         <span class="dragon-boat-status-badge" data-service-badge data-state="pending">正在检查</span>
       </div>
-      <p class="dragon-boat-status-message" data-service-message>正在读取部署配置……</p>
+      <p class="dragon-boat-status-message" data-service-message>正在连接 Apps Script……</p>
       <p class="dragon-boat-status-detail" data-service-detail hidden></p>
     </section>
 
+    <section class="dragon-boat-season-overview" data-season-overview hidden aria-labelledby="season-title">
+      <div class="dragon-boat-season-copy">
+        <p class="dragon-boat-session-label">当前赛季</p>
+        <h2 id="season-title" data-season-name></h2>
+        <p data-season-range></p>
+        <p data-season-state></p>
+      </div>
+      <a class="dragon-boat-primary-button dragon-boat-button-link" data-join-link target="_blank" rel="noreferrer">填写本季入队表单</a>
+    </section>
+
+    <section class="dragon-boat-roster-summary" data-roster-summary hidden aria-live="polite">
+      <strong data-roster-count></strong>
+      <span data-roster-detail></span>
+    </section>
+
+    <section class="dragon-boat-week-list" data-week-list hidden aria-labelledby="published-training-title">
+      <div class="dragon-boat-section-heading">
+        <div>
+          <p class="dragon-boat-session-label">公开计划</p>
+          <h2 id="published-training-title">已开放训练</h2>
+        </div>
+      </div>
+      <div data-week-cards></div>
+      <p class="dragon-boat-empty-state" data-week-empty hidden></p>
+    </section>
+
     <p class="dragon-boat-note">
-      这个状态页不读取 Google Form、队员名单或训练资料，也不会写入业务数据。
+      队员无需登录。训练报名和候补功能将在下一阶段接入；当前页面只展示管理员已经正式开放的场次。
     </p>
   </main>
 </div>
 
 <script>
   import { DragonBoatApiClient, DragonBoatApiError } from "../lib/api-client.js";
+  import { loadRosterSnapshot, saveRosterSnapshot } from "../lib/public-roster-cache.js";
 
-  const app = document.querySelector<HTMLElement>("[data-dragon-boat-app]");
-  const badge = app?.querySelector<HTMLSpanElement>("[data-service-badge]");
-  const message = app?.querySelector<HTMLParagraphElement>("[data-service-message]");
-  const detail = app?.querySelector<HTMLParagraphElement>("[data-service-detail]");
+  const root = document.querySelector<HTMLElement>("[data-dragon-boat-app]");
+  const loadingCard = root?.querySelector<HTMLElement>("[data-loading-card]");
+  const badge = root?.querySelector<HTMLElement>("[data-service-badge]");
+  const message = root?.querySelector<HTMLElement>("[data-service-message]");
+  const detail = root?.querySelector<HTMLElement>("[data-service-detail]");
+  const pageTitle = root?.querySelector<HTMLElement>("[data-page-title]");
+  const pageLede = root?.querySelector<HTMLElement>("[data-page-lede]");
+  const overview = root?.querySelector<HTMLElement>("[data-season-overview]");
+  const seasonName = root?.querySelector<HTMLElement>("[data-season-name]");
+  const seasonRange = root?.querySelector<HTMLElement>("[data-season-range]");
+  const seasonState = root?.querySelector<HTMLElement>("[data-season-state]");
+  const joinLink = root?.querySelector<HTMLAnchorElement>("[data-join-link]");
+  const rosterSummary = root?.querySelector<HTMLElement>("[data-roster-summary]");
+  const rosterCount = root?.querySelector<HTMLElement>("[data-roster-count]");
+  const rosterDetail = root?.querySelector<HTMLElement>("[data-roster-detail]");
+  const weekList = root?.querySelector<HTMLElement>("[data-week-list]");
+  const weekCards = root?.querySelector<HTMLElement>("[data-week-cards]");
+  const weekEmpty = root?.querySelector<HTMLElement>("[data-week-empty]");
+  const apiUrl = root?.getAttribute("data-api-url")?.trim() || "";
 
-  function showStatus(state: string, label: string, text: string, technicalDetail = "") {
+  function showConnection(state: string, label: string, text: string, technical = "") {
     if (!badge || !message || !detail) return;
     badge.dataset.state = state;
     badge.textContent = label;
     message.textContent = text;
-    detail.textContent = technicalDetail;
-    detail.hidden = !technicalDetail;
+    detail.textContent = technical;
+    detail.hidden = !technical;
   }
 
-  async function checkService() {
-    const apiUrl = app?.getAttribute("data-api-url")?.trim();
-    if (!apiUrl) {
-      showStatus(
-        "pending",
-        "尚未配置",
-        "本地页面已经就绪，等待配置测试 Apps Script Web App 地址。",
-        "PUBLIC_DRAGON_BOAT_API_URL is not set"
-      );
+  function dateOnly(value: string, timeZone: string) {
+    return new Intl.DateTimeFormat("zh-CN", {
+      timeZone,
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    }).format(new Date(`${value}T12:00:00Z`));
+  }
+
+  function dateTime(value: string, timeZone: string) {
+    return new Intl.DateTimeFormat("zh-CN", {
+      timeZone,
+      month: "numeric",
+      day: "numeric",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(new Date(value));
+  }
+
+  function renderWeeks(data: any) {
+    if (!weekList || !weekCards || !weekEmpty) return;
+    weekList.hidden = false;
+    weekCards.replaceChildren();
+    const weeks = Array.isArray(data.weeks) ? data.weeks : [];
+    if (!weeks.length) {
+      weekEmpty.hidden = false;
+      weekEmpty.textContent = data.state === "REST"
+        ? "本赛季目前处于休息状态，管理员尚未开放新的训练计划。"
+        : "本季暂时没有已发布的训练。";
       return;
     }
+    weekEmpty.hidden = true;
+    weeks.forEach((week: any) => {
+      const section = document.createElement("section");
+      section.className = "dragon-boat-week-card";
+      const heading = document.createElement("h3");
+      heading.textContent = `一周开始于 ${dateOnly(week.week_start_date, data.season.timezone)}`;
+      const grid = document.createElement("div");
+      grid.className = "dragon-boat-practice-grid";
+      week.practices.forEach((practice: any) => {
+        const card = document.createElement("article");
+        card.className = "dragon-boat-practice-card";
+        const title = document.createElement("h4");
+        title.textContent = dateTime(practice.start_at, practice.timezone);
+        const time = document.createElement("span");
+        time.textContent = `至 ${new Intl.DateTimeFormat("zh-CN", { timeZone: practice.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(practice.end_at))}`;
+        const location = document.createElement("strong");
+        location.textContent = practice.location;
+        const address = document.createElement("p");
+        address.textContent = practice.address;
+        card.append(title, time, location, address);
+        if (practice.map_url) {
+          const map = document.createElement("a");
+          map.href = practice.map_url;
+          map.target = "_blank";
+          map.rel = "noreferrer";
+          map.textContent = "查看地图";
+          card.append(map);
+        }
+        grid.append(card);
+      });
+      section.append(heading, grid);
+      weekCards.append(section);
+    });
+  }
 
+  async function renderRoster(client: DragonBoatApiClient, season: any) {
+    if (!rosterSummary || !rosterCount || !rosterDetail || season.status !== "OPEN") return;
+    let snapshot = loadRosterSnapshot(season);
+    let source = "本机缓存";
+    if (!snapshot) {
+      const response = await client.get("members", { season_id: season.season_id });
+      snapshot = response.data;
+      saveRosterSnapshot(snapshot);
+      source = "共享名单快照";
+    }
+    rosterSummary.hidden = false;
+    rosterCount.textContent = `${snapshot.members.length} 名本季有效队员`;
+    rosterDetail.textContent = `${source}，有效至 ${new Date(snapshot.expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  }
+
+  async function loadPage() {
+    if (!apiUrl) {
+      showConnection("error", "尚未配置", "训练服务地址尚未配置。", "PUBLIC_DRAGON_BOAT_API_URL");
+      return;
+    }
+    const client = new DragonBoatApiClient({ baseUrl: apiUrl });
     try {
-      const client = new DragonBoatApiClient({ baseUrl: apiUrl });
-      const response = await client.get("health");
-      const checkedAt = new Date(response.meta.server_time).toLocaleString();
-      showStatus(
-        "ready",
-        "连接正常",
-        "网站已收到 Apps Script 的有效响应。",
-        `service ${response.data.service_version} · contract ${response.meta.contract_version} · ${checkedAt}`
-      );
+      const response = await client.get("bootstrap");
+      const data = response.data;
+      showConnection("ready", "连接正常", "已读取最新公开训练计划。", `contract ${response.meta.contract_version}`);
+      if (!data.season) {
+        if (pageTitle) pageTitle.textContent = "目前没有开放赛季";
+        if (pageLede) pageLede.textContent = "新赛季完成 Form 和 Sheet 连接后会自动出现在这里。过往赛季入口不受影响。";
+        return;
+      }
+      if (loadingCard) loadingCard.hidden = true;
+      if (pageTitle) pageTitle.textContent = data.season.name;
+      if (pageLede) pageLede.textContent = "这里显示本季已经由管理员确认并开放的训练安排。";
+      if (overview) overview.hidden = false;
+      if (seasonName) seasonName.textContent = data.season.name;
+      if (seasonRange) seasonRange.textContent = `${dateOnly(data.season.start_date, data.season.timezone)}至${dateOnly(data.season.end_date, data.season.timezone)}`;
+      if (seasonState) {
+        seasonState.textContent = data.state === "REST"
+          ? "本赛季有效，目前没有新的已开放训练。"
+          : data.state === "COMPLETED" ? "本赛季已经结束，内容正在归档。" : "本赛季训练计划已开放。";
+      }
+      if (joinLink) {
+        joinLink.href = data.season.join_form_url;
+        joinLink.hidden = !data.season.join_form_url || data.season.status !== "OPEN";
+      }
+      renderWeeks(data);
+      await renderRoster(client, data.season);
     } catch (error) {
       const code = error instanceof DragonBoatApiError ? error.code : "UNKNOWN_ERROR";
-      showStatus("error", "连接失败", "暂时无法连接训练服务，请稍后重试。", code);
+      showConnection("error", "读取失败", "暂时无法读取训练计划，请稍后重试。", code);
+      if (pageTitle) pageTitle.textContent = "训练计划暂时无法读取";
     }
   }
 
-  checkService();
+  loadPage();
 </script>

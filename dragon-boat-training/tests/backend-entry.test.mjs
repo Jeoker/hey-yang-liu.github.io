@@ -68,7 +68,9 @@ test("setup creates a private system spreadsheet when no ID is configured", asyn
     "Coaches",
     "CoachSessions",
     "SystemRequests",
-    "SystemAuditLog"
+    "SystemAuditLog",
+    "Seasons",
+    "SystemSettings"
   ]);
 });
 

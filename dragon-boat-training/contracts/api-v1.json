@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "contract_version": "2026-08-31.p0.2",
+  "contract_version": "2026-09-02.p1.1",
   "service": "dragon-boat-training",
   "transport": {
     "get_action_parameter": "action",
@@ -18,7 +18,7 @@
       "ok": true,
       "data": "action-specific object",
       "meta": {
-        "contract_version": "2026-08-31.p0.2",
+        "contract_version": "2026-09-02.p1.1",
         "server_time": "ISO 8601 timestamp",
         "request_id": "request identifier"
       }
@@ -31,7 +31,7 @@
         "retryable": "boolean"
       },
       "meta": {
-        "contract_version": "2026-08-31.p0.2",
+        "contract_version": "2026-09-02.p1.1",
         "server_time": "ISO 8601 timestamp",
         "request_id": "request identifier"
       }
@@ -42,6 +42,22 @@
       "methods": ["GET", "POST"],
       "authentication": "public",
       "writes_data": false
+    },
+    "bootstrap": {
+      "methods": ["GET"],
+      "authentication": "public",
+      "request_fields": ["optional season_id"],
+      "response_fields": ["state", "season", "weeks"],
+      "writes_data": false,
+      "notes": "Returns only published practices. Draft weeks and unpublished additional practices are excluded."
+    },
+    "members": {
+      "methods": ["GET"],
+      "authentication": "public",
+      "request_fields": ["season_id"],
+      "response_fields": ["season_id", "binding_version", "roster_version", "generated_at", "expires_at", "members"],
+      "writes_data": false,
+      "notes": "The shared server snapshot has one absolute ten-minute expiry and contains active public member fields only."
     },
     "coachLogin": {
       "methods": ["POST"],
@@ -55,7 +71,7 @@
       "methods": ["POST"],
       "authentication": "session_token",
       "request_fields": ["session_token"],
-      "response_fields": ["coach", "session", "panels", "p0_connectivity_write_available"],
+      "response_fields": ["coach", "session", "panels", "p0_connectivity_write_available", "default_season_id", "seasons"],
       "writes_data": false
     },
     "coachConnectivityWrite": {
@@ -72,6 +88,87 @@
       "request_fields": ["session_token"],
       "response_fields": ["session_id", "revoked"],
       "writes_data": true
+    },
+    "getSeasonManagement": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "season_id"],
+      "response_fields": ["season", "is_default", "templates", "weeks", "members"],
+      "writes_data": false
+    },
+    "createSeason": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "name", "start_date", "end_date", "timezone"],
+      "response_fields": ["season"],
+      "writes_data": true
+    },
+    "validateSeasonBinding": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "season_id", "form", "spreadsheet", "response_sheet", "display_name_header"],
+      "response_fields": ["form_id", "form_url", "runtime_spreadsheet_id", "response_sheet_id", "response_sheet_name", "display_name_header", "schema_fingerprint", "response_count", "preview_names"],
+      "writes_data": false
+    },
+    "initializeSeason": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "season_id", "season_version", "form", "spreadsheet", "response_sheet", "display_name_header"],
+      "response_fields": ["season", "sync", "default_season_id"],
+      "writes_data": true,
+      "notes": "Revalidates the binding, initializes runtime tabs and the form-submit trigger, imports members, locks the binding and automatically opens the season."
+    },
+    "retrySeasonSync": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "season_id"],
+      "response_fields": ["season", "sync"],
+      "writes_data": true
+    },
+    "updateScheduleTemplates": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "season_id", "season_version", "templates"],
+      "response_fields": ["season", "templates"],
+      "writes_data": true
+    },
+    "updateTrainingWeek": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "season_id", "season_version", "week_start_date"],
+      "response_fields": ["week", "practices"],
+      "writes_data": true,
+      "notes": "Creates or recovers a private week draft from active templates."
+    },
+    "confirmTrainingWeek": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "season_id", "week_id", "week_version", "optional open_at"],
+      "response_fields": ["week", "practices"],
+      "writes_data": true
+    },
+    "publishTrainingWeek": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "season_id", "week_id", "week_version"],
+      "response_fields": ["week", "practices"],
+      "writes_data": true
+    },
+    "createPractice": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "season_id", "week_id", "week_version", "practice_date", "start_time", "end_time", "location", "address", "optional map_url"],
+      "response_fields": ["week", "practice"],
+      "writes_data": true,
+      "notes": "Creates a private additional-practice draft in an already-open week."
+    },
+    "publishAdditionalPractice": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "season_id", "week_id", "practice_id", "week_version", "practice_version"],
+      "response_fields": ["week", "practice"],
+      "writes_data": true,
+      "notes": "Publishes only the named additional practice."
     }
   },
   "management_errors": [
@@ -84,6 +181,10 @@
     "SERVICE_BUSY",
     "CONFIGURATION_REQUIRED",
     "CONFIGURATION_ERROR",
-    "RECOVERY_REQUIRED"
+    "RECOVERY_REQUIRED",
+    "VERSION_CONFLICT",
+    "SEASON_NOT_FOUND",
+    "SEASON_NOT_OPEN",
+    "BINDING_LOCKED"
   ]
 }

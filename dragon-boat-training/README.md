@@ -1,6 +1,6 @@
 # Dragon Boat Training
 
-> 状态：设计已确认；P0 已完成。Google Web App、私有系统 Sheet、实际 GitHub Pages 公开连接、Coach Code 登录、幂等写入与退出均已通过真实联调。
+> 状态：设计已确认；P0 已完成。P1 的赛季绑定、名单同步与缓存、周草稿和分层发布已经完成本地实现，正在进行真实 Google／Pages 联调，尚未标记完成。
 > 更新：2026-09-02
 
 为龙舟队提供按赛季入队、每周排期与训练报名、候补、排座和历史荣誉墙。网站部署于 GitHub Pages，业务由 Google Apps Script 处理，数据保存在 Google Sheets。
@@ -10,6 +10,7 @@
 | 文档 | 内容与维护范围 |
 |---|---|
 | 本文 | 产品规则、范围和唯一的待定事项清单 |
+| [当前进度与接续入口](CURRENT-STATUS.md) | 已验证基线、当前开发位置和重新开启任务时的检查顺序 |
 | [前端规格](frontend-spec.md) | 页面、交互、视觉资源和前端数据更新 |
 | [后端规格](google-sheets-backend-spec.md) | 数据模型、接口、同步、缓存、归档和实现验证 |
 | [Epic 总览与实现顺序](epics/README.md) | 三个 Epic 的职责、工作包、依赖与分阶段验收；分别链接后端、队员前端和管理员页面 |

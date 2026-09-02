@@ -35,16 +35,35 @@ class FakeRange {
   setNumberFormat() {
     return this;
   }
+
+  getSheet() {
+    return this.sheet;
+  }
 }
 
 class FakeSheet {
-  constructor(name) {
+  constructor(name, id) {
     this.name = name;
+    this.id = id;
     this.rows = [];
+    this.formUrl = "";
   }
 
   getName() {
     return this.name;
+  }
+
+  getSheetId() {
+    return this.id;
+  }
+
+  getFormUrl() {
+    return this.formUrl;
+  }
+
+  setFormUrl(value) {
+    this.formUrl = value;
+    return this;
   }
 
   getLastRow() {
@@ -71,6 +90,7 @@ class FakeSpreadsheet {
     this.id = id;
     this.title = title;
     this.sheets = new Map();
+    this.nextSheetId = 1000;
   }
 
   getId() {
@@ -82,7 +102,8 @@ class FakeSpreadsheet {
   }
 
   insertSheet(name) {
-    const sheet = new FakeSheet(name);
+    const sheet = new FakeSheet(name, this.nextSheetId);
+    this.nextSheetId += 1;
     this.sheets.set(name, sheet);
     return sheet;
   }
@@ -93,6 +114,21 @@ class FakeSpreadsheet {
 
   deleteSheet(sheet) {
     this.sheets.delete(sheet.getName());
+  }
+}
+
+class FakeForm {
+  constructor(id, destinationId) {
+    this.id = id;
+    this.destinationId = destinationId;
+  }
+
+  getDestinationId() {
+    return this.destinationId;
+  }
+
+  getPublishedUrl() {
+    return `https://docs.google.com/forms/d/${this.id}/viewform`;
   }
 }
 
@@ -142,7 +178,10 @@ export async function createBackend(options = {}) {
   const properties = new FakeProperties(initialProperties);
   const cacheValues = new Map();
   const spreadsheets = new Map([[spreadsheet.getId(), spreadsheet]]);
+  const forms = new Map();
+  const triggers = [];
   let createdSpreadsheetSequence = 0;
+  let triggerSequence = 0;
 
   const context = {
     CacheService: {
@@ -153,6 +192,9 @@ export async function createBackend(options = {}) {
           },
           put(key, value) {
             cacheValues.set(key, String(value));
+          },
+          remove(key) {
+            cacheValues.delete(key);
           }
         };
       }
@@ -178,6 +220,49 @@ export async function createBackend(options = {}) {
     PropertiesService: {
       getScriptProperties() {
         return properties;
+      }
+    },
+    FormApp: {
+      openById(id) {
+        const form = forms.get(id);
+        if (!form) throw new Error("Form not found");
+        return form;
+      }
+    },
+    ScriptApp: {
+      getProjectTriggers() {
+        return [...triggers];
+      },
+      newTrigger(handler) {
+        const builder = {
+          handler,
+          spreadsheetId: "",
+          forSpreadsheet(id) {
+            this.spreadsheetId = id;
+            return this;
+          },
+          onFormSubmit() {
+            return this;
+          },
+          timeBased() {
+            return this;
+          },
+          everyMinutes() {
+            return this;
+          },
+          create() {
+            triggerSequence += 1;
+            const id = `trigger-${triggerSequence}`;
+            const trigger = {
+              getUniqueId() { return id; },
+              getHandlerFunction() { return handler; },
+              spreadsheetId: this.spreadsheetId
+            };
+            triggers.push(trigger);
+            return trigger;
+          }
+        };
+        return builder;
       }
     },
     SpreadsheetApp: {
@@ -221,6 +306,9 @@ export async function createBackend(options = {}) {
       }
     },
     Date,
+    Intl,
+    Array,
+    Boolean,
     Error,
     JSON,
     Math,
@@ -243,10 +331,32 @@ export async function createBackend(options = {}) {
   }
 
   const activeSpreadsheetId = properties.getProperty("DRAGON_BOAT_SYSTEM_SPREADSHEET_ID");
+  function createFormBinding({
+    formId = "form-test-1234567890",
+    spreadsheetId = "runtime-sheet-1234567890",
+    responseSheetName = "Form Responses 1",
+    headers = ["Timestamp", "Display Name"],
+    rows = []
+  } = {}) {
+    let runtimeSpreadsheet = spreadsheets.get(spreadsheetId);
+    if (!runtimeSpreadsheet) {
+      runtimeSpreadsheet = new FakeSpreadsheet(spreadsheetId, "Season Runtime Test");
+      spreadsheets.set(spreadsheetId, runtimeSpreadsheet);
+    }
+    let responseSheet = runtimeSpreadsheet.getSheetByName(responseSheetName);
+    if (!responseSheet) responseSheet = runtimeSpreadsheet.insertSheet(responseSheetName);
+    responseSheet.setFormUrl(`https://docs.google.com/forms/d/${formId}/edit`);
+    responseSheet.rows = [headers, ...rows.map((row) => [...row])];
+    forms.set(formId, new FakeForm(formId, spreadsheetId));
+    return { formId, spreadsheetId, runtimeSpreadsheet, responseSheet };
+  }
   return {
     context,
     spreadsheet: spreadsheets.get(activeSpreadsheetId) || spreadsheet,
     spreadsheets,
+    forms,
+    triggers,
+    createFormBinding,
     properties,
     cacheValues
   };

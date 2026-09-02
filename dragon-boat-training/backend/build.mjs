@@ -7,6 +7,11 @@ const sourceOrder = [
   "Config.gs",
   "Security.gs",
   "SystemStore.gs",
+  "TimeUtils.gs",
+  "SeasonStore.gs",
+  "SeasonActions.gs",
+  "ScheduleActions.gs",
+  "PublicActions.gs",
   "CoachActions.gs",
   "Setup.gs",
   "Code.gs"

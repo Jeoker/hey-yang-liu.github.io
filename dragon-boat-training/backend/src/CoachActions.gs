@@ -104,6 +104,9 @@ function ensureCoachSessionForLogin_(plannedResult) {
 function coachBootstrap_(request) {
   var sessionToken = requireRequestString_(request, "session_token", 32, 2048);
   var authenticated = validateCoachSession_(sessionToken);
+  var seasons = getSheetRecords_("Seasons").map(seasonManagementProjection_).sort(function (left, right) {
+    return right.start_date.localeCompare(left.start_date);
+  });
   return {
     coach: {
       coach_id: String(authenticated.coach.coach_id),
@@ -113,12 +116,14 @@ function coachBootstrap_(request) {
       expires_at: String(authenticated.session.expires_at)
     },
     panels: [
-      { id: "training", label: "训练与排座", available: false },
-      { id: "members", label: "队员", available: false },
-      { id: "season", label: "赛季与表单", available: false },
+      { id: "training", label: "训练与排座", available: true },
+      { id: "members", label: "队员", available: true },
+      { id: "season", label: "赛季与表单", available: true },
       { id: "audit", label: "操作记录", available: false }
     ],
-    p0_connectivity_write_available: true
+    p0_connectivity_write_available: true,
+    default_season_id: getDefaultSeasonId_(),
+    seasons: seasons
   };
 }
 

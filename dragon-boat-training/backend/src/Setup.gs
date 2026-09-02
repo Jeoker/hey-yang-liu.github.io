@@ -26,6 +26,29 @@ function setupDragonBoatP0() {
   });
 }
 
+function setupDragonBoatP1() {
+  var result = setupDragonBoatP0();
+  result.schedule_trigger_id = ensureDragonBoatScheduleTrigger_();
+  return result;
+}
+
+function ensureDragonBoatScheduleTrigger_() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var index = 0; index < triggers.length; index += 1) {
+    if (
+      typeof triggers[index].getHandlerFunction === "function" &&
+      triggers[index].getHandlerFunction() === "publishDueTrainingWeeks"
+    ) {
+      return String(triggers[index].getUniqueId());
+    }
+  }
+  var trigger = ScriptApp.newTrigger("publishDueTrainingWeeks")
+    .timeBased()
+    .everyMinutes(5)
+    .create();
+  return String(trigger.getUniqueId());
+}
+
 function removeBlankDefaultSheet_(spreadsheet) {
   var defaultSheet = spreadsheet.getSheetByName("Sheet1");
   if (!defaultSheet || spreadsheet.getSheets().length <= 1) {

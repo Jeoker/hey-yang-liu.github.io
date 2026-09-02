@@ -1,6 +1,6 @@
-var DRAGON_BOAT_CONTRACT_VERSION_ = "2026-08-31.p0.2";
+var DRAGON_BOAT_CONTRACT_VERSION_ = "2026-09-02.p1.1";
 var DRAGON_BOAT_SERVICE_NAME_ = "dragon-boat-training";
-var DRAGON_BOAT_SERVICE_VERSION_ = "0.2.1-p0";
+var DRAGON_BOAT_SERVICE_VERSION_ = "0.3.0-p1";
 
 var DRAGON_BOAT_PROPERTY_KEYS_ = {
   SYSTEM_SPREADSHEET_ID: "DRAGON_BOAT_SYSTEM_SPREADSHEET_ID",
@@ -56,10 +56,132 @@ var DRAGON_BOAT_SHEET_HEADERS_ = {
     "action",
     "status",
     "details_json"
+  ],
+  Seasons: [
+    "season_id",
+    "name",
+    "start_date",
+    "end_date",
+    "timezone",
+    "season_ends_at",
+    "status",
+    "form_id",
+    "form_url",
+    "runtime_spreadsheet_id",
+    "response_sheet_id",
+    "response_sheet_name",
+    "field_mapping_json",
+    "schema_fingerprint",
+    "binding_version",
+    "season_version",
+    "roster_version",
+    "initialization_status",
+    "trigger_id",
+    "last_sync_at",
+    "activated_at",
+    "completed_at",
+    "archived_at",
+    "created_by",
+    "created_at",
+    "updated_at"
+  ],
+  SystemSettings: [
+    "setting_key",
+    "setting_value",
+    "settings_version",
+    "updated_by",
+    "updated_at"
   ]
+};
+
+var DRAGON_BOAT_RUNTIME_SHEET_HEADERS_ = {
+  Members: [
+    "season_id",
+    "member_id",
+    "source_key",
+    "source_row_number",
+    "source_display_name",
+    "display_name_override",
+    "status",
+    "default_preference",
+    "member_version",
+    "created_at",
+    "updated_at"
+  ],
+  ScheduleTemplates: [
+    "season_id",
+    "template_id",
+    "day_of_week",
+    "start_time",
+    "end_time",
+    "timezone",
+    "location",
+    "address",
+    "map_url",
+    "active",
+    "template_version",
+    "created_at",
+    "updated_at"
+  ],
+  TrainingWeeks: [
+    "season_id",
+    "week_id",
+    "week_start_date",
+    "scheduled_open_at",
+    "status",
+    "week_version",
+    "confirmed_version",
+    "confirmed_by",
+    "confirmed_at",
+    "published_at",
+    "created_at",
+    "updated_at"
+  ],
+  Practices: [
+    "season_id",
+    "practice_id",
+    "week_id",
+    "template_id",
+    "generation_key",
+    "start_at",
+    "end_at",
+    "timezone",
+    "location",
+    "address",
+    "map_url",
+    "left_capacity",
+    "right_capacity",
+    "signup_cutoff_at",
+    "practice_version",
+    "cancelled_at",
+    "cancelled_by",
+    "schedule_published_at",
+    "schedule_published_by",
+    "created_at",
+    "updated_at"
+  ],
+  SignupsCurrent: [
+    "season_id", "practice_id", "member_id", "preference", "status",
+    "queue_at", "queue_sequence", "updated_at", "last_request_id"
+  ],
+  SeatPlanCurrent: [
+    "season_id", "practice_id", "row_number", "side", "member_id",
+    "seat_plan_version", "updated_by", "updated_at"
+  ],
+  AuditLog: [
+    "event_id", "request_id", "server_time", "season_id", "entity_type",
+    "entity_id", "actor_type", "actor_id", "action", "status", "details_json"
+  ],
+  Settings: ["setting_key", "setting_value", "updated_at"],
+  ImportState: [
+    "season_id", "response_sheet_id", "schema_fingerprint", "last_scanned_row",
+    "imported_count", "failed_count", "last_error", "updated_at"
+  ],
+  Health: ["health_key", "health_value", "updated_at"]
 };
 
 var DRAGON_BOAT_SESSION_TTL_DEFAULT_SECONDS_ = 8 * 60 * 60;
 var DRAGON_BOAT_SESSION_TTL_MIN_SECONDS_ = 15 * 60;
 var DRAGON_BOAT_SESSION_TTL_MAX_SECONDS_ = 24 * 60 * 60;
 var DRAGON_BOAT_SCRIPT_LOCK_TIMEOUT_MS_ = 10000;
+var DRAGON_BOAT_PUBLIC_ROSTER_CACHE_SECONDS_ = 600;

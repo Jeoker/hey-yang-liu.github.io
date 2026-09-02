@@ -1,4 +1,4 @@
-export const DRAGON_BOAT_CONTRACT_VERSION = "2026-08-31.p0.2";
+export const DRAGON_BOAT_CONTRACT_VERSION = "2026-09-02.p1.1";
 
 export class DragonBoatApiError extends Error {
   constructor(code, message, options = {}) {
