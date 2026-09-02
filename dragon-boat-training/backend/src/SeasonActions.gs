@@ -19,6 +19,9 @@ function createSeason_(request) {
     var transaction = beginSystemRequest_(actorId, "createSeason", request.request_id, payloadDigest, {
       season_id: seasonId
     });
+    if (String(transaction.record.status) === "COMPLETED") {
+      return readSystemRequestResult_(transaction.record);
+    }
     var planned = readSystemRequestResult_(transaction.record);
     var season = findSeasonById_(planned.season_id);
     if (!season) {

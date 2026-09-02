@@ -103,6 +103,18 @@ test("P1 creates a draft, validates the real Form target, initializes tabs and i
   assert.equal(sheetRecords(fixture.runtimeSpreadsheet, "Members").length, 2);
 });
 
+test("a repeated create-season request returns the original draft without another row", async () => {
+  const backend = await createBackend();
+  const token = login(backend.context);
+  const first = createSeason(backend.context, token, "p1_create_replayed");
+  const replayed = createSeason(backend.context, token, "p1_create_replayed");
+
+  assert.equal(first.ok, true);
+  assert.deepEqual(replayed.data, first.data);
+  assert.equal(sheetRecords(backend.spreadsheet, "Seasons").length, 1);
+  assert.equal(sheetRecords(backend.spreadsheet, "Seasons")[0].season_id, first.data.season.season_id);
+});
+
 test("P1 rejects an incorrect Form destination and leaves the season draft", async () => {
   const backend = await createBackend();
   const expected = backend.createFormBinding();

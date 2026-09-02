@@ -1,6 +1,6 @@
 # Epic 总览与实现顺序
 
-> 状态：P0 已完成。P1 的后端、公开页面和 Coach Mode 核心链路已通过本地自动化与构建检查，私有 Google 测试资源已准备；真实 Web App／Pages 发布与端到端验收尚未完成，因此 P1 仍在进行中。
+> 状态：P0 已完成。P1“建季并开放一周”的后端、公开页面和 Coach Mode 核心链路已从真实 GitHub Pages、Apps Script、Form 和 Sheet 完成端到端验收；下一阶段为 P2 报名与维护。
 > 更新：2026-09-02
 
 产品规则及唯一待定清单以[项目说明](../README.md)为准；页面与接口细节分别见[前端规格](../frontend-spec.md)和[后端规格](../google-sheets-backend-spec.md)。本目录只安排职责、依赖、交付和验证，不复制业务决策或保存讨论历史。
