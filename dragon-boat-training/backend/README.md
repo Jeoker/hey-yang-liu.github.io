@@ -40,4 +40,4 @@
 
 ## 验证边界
 
-根目录运行 `npm test` 会以 Apps Script 服务替身验证摘要存储、登录、过期、凭据重置、退出、重复初始化及写入幂等。当前测试部署已完成真实 Google GET、POST、Content Service 重定向、Coach 登录、同请求重复写入、退出失效及 Edge 浏览器直连验证；P0 在实际 GitHub Pages 来源完成同一连接和成功登录检查后关闭。
+根目录运行 `npm test` 会以 Apps Script 服务替身验证摘要存储、登录、过期、凭据重置、退出、重复初始化及写入幂等。当前测试部署已完成真实 Google GET、POST、Content Service 重定向、Coach 登录、同请求重复写入及退出失效验证；实际 GitHub Pages 来源也已完成健康检查、成功登录、受保护写入、退出和刷新后会话不恢复的 Edge 浏览器验收。P0 已关闭。

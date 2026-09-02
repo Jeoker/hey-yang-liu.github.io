@@ -1,7 +1,7 @@
 # Dragon Boat Training
 
-> 状态：设计已确认；P0 Google Web App、私有系统 Sheet、Coach Code 会话和幂等写入已完成真实联调，GitHub Pages 发布来源验收进行中。
-> 更新：2026-09-01
+> 状态：设计已确认；P0 已完成。Google Web App、私有系统 Sheet、实际 GitHub Pages 公开连接、Coach Code 登录、幂等写入与退出均已通过真实联调。
+> 更新：2026-09-02
 
 为龙舟队提供按赛季入队、每周排期与训练报名、候补、排座和历史荣誉墙。网站部署于 GitHub Pages，业务由 Google Apps Script 处理，数据保存在 Google Sheets。
 

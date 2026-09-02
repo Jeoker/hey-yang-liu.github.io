@@ -1,7 +1,7 @@
 # Epic 总览与实现顺序
 
-> 状态：P0 收尾中。Google Web App、私有系统 Sheet、真实会话和幂等写入已验证；FE-01 与 ADM-01 已通过本地 Edge 来源联调，尚待实际 GitHub Pages 来源验收。
-> 更新：2026-09-01
+> 状态：P0 已完成。Google Web App、私有系统 Sheet、真实会话、幂等写入，以及实际 GitHub Pages 来源的公开连接、成功登录、受保护写入与退出均已验证。下一阶段进入 P1。
+> 更新：2026-09-02
 
 产品规则及唯一待定清单以[项目说明](../README.md)为准；页面与接口细节分别见[前端规格](../frontend-spec.md)和[后端规格](../google-sheets-backend-spec.md)。本目录只安排职责、依赖、交付和验证，不复制业务决策或保存讨论历史。
 
