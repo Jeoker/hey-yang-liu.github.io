@@ -1,0 +1,259 @@
+---
+import logoUrl from "../../assets/team-logo-placeholder.svg";
+import "../styles/app.css";
+
+const basePath = import.meta.env.BASE_URL.endsWith("/")
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`;
+const appPath = `${basePath}dragon-boat-training/`;
+const coachPath = `${appPath}coach/`;
+const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
+  || "https://script.google.com/macros/s/AKfycbw4c8mBbop9Qnq29nYQ_AtLembq1OHKt_nRjIv3EE9kw0DliTVM0lMY6svr8X0gcQW8/exec";
+---
+
+<div class="dragon-boat-app" data-coach-mode-app data-api-url={apiUrl}>
+  <header class="dragon-boat-header dragon-boat-shell">
+    <a class="dragon-boat-brand" href={appPath} aria-label="Dragon Boat Training 首页">
+      <img src={logoUrl.src} alt="队伍 Logo 占位图" width="96" height="96" />
+      <span class="dragon-boat-brand-copy">
+        <span>Dragon Boat Training</span>
+        <small>Team training portal</small>
+      </span>
+    </a>
+
+    <nav class="dragon-boat-nav" aria-label="训练系统导航">
+      <a href={appPath}>本季训练</a>
+      <button type="button" disabled title="将在后续阶段实现">过往赛季</button>
+      <a href={coachPath} aria-current="page">Coach Mode</a>
+    </nav>
+  </header>
+
+  <main class="dragon-boat-main dragon-boat-shell dragon-boat-coach-main">
+    <p class="dragon-boat-kicker">统一管理入口</p>
+    <h1>Coach Mode</h1>
+    <p class="dragon-boat-lede">
+      Coach、Steerer 和其他管理员使用各自的 Coach Code 登录同一个工作区，拥有相同的管理能力。
+    </p>
+
+    <section class="dragon-boat-auth-card" data-login-panel aria-labelledby="coach-login-title">
+      <div>
+        <h2 id="coach-login-title">输入个人 Coach Code</h2>
+        <p>Code 只用于本次登录，不会显示在页面上，也不会保存在浏览器中。</p>
+      </div>
+      <form class="dragon-boat-login-form" data-login-form>
+        <label for="coach-code">Coach Code</label>
+        <div class="dragon-boat-login-row">
+          <input
+            id="coach-code"
+            name="coach_code"
+            type="password"
+            minlength="6"
+            maxlength="128"
+            autocomplete="off"
+            spellcheck="false"
+            required
+            data-coach-code
+          />
+          <button type="submit" class="dragon-boat-primary-button" data-login-button>登录</button>
+        </div>
+      </form>
+      <p class="dragon-boat-form-status" data-login-status aria-live="polite"></p>
+    </section>
+
+    <section class="dragon-boat-workspace" data-workspace hidden aria-labelledby="coach-workspace-title">
+      <div class="dragon-boat-workspace-heading">
+        <div>
+          <p class="dragon-boat-session-label">当前管理会话</p>
+          <h2 id="coach-workspace-title" data-coach-name>Coach Mode</h2>
+          <p data-session-expiry></p>
+        </div>
+        <button type="button" class="dragon-boat-secondary-button" data-logout-button>退出</button>
+      </div>
+
+      <div class="dragon-boat-panel-grid" data-panel-grid></div>
+
+      <section class="dragon-boat-connectivity-panel" aria-labelledby="protected-write-title">
+        <div>
+          <h3 id="protected-write-title">P0 受保护写入测试</h3>
+          <p>向系统审计日志写入一条无业务副作用的测试事件，用于验证当前 Coach 会话和写入链路。</p>
+        </div>
+        <button type="button" class="dragon-boat-primary-button" data-write-button>执行测试写入</button>
+        <p class="dragon-boat-form-status" data-write-status aria-live="polite"></p>
+      </section>
+    </section>
+
+    <p class="dragon-boat-note">
+      Google 登录只用于维护原生 Form、Sheet 和 Apps Script；它不会代替 Coach Code 的网站管理会话。
+    </p>
+  </main>
+</div>
+
+<script>
+  import { DragonBoatApiClient, DragonBoatApiError, createRequestId } from "../lib/api-client.js";
+  import {
+    clearCoachSession,
+    isCoachSessionError,
+    loadCoachSession,
+    saveCoachSession
+  } from "../lib/coach-session.js";
+
+  const root = document.querySelector<HTMLElement>("[data-coach-mode-app]");
+  const loginPanel = root?.querySelector<HTMLElement>("[data-login-panel]");
+  const loginForm = root?.querySelector<HTMLFormElement>("[data-login-form]");
+  const codeInput = root?.querySelector<HTMLInputElement>("[data-coach-code]");
+  const loginButton = root?.querySelector<HTMLButtonElement>("[data-login-button]");
+  const loginStatus = root?.querySelector<HTMLElement>("[data-login-status]");
+  const workspace = root?.querySelector<HTMLElement>("[data-workspace]");
+  const coachName = root?.querySelector<HTMLElement>("[data-coach-name]");
+  const sessionExpiry = root?.querySelector<HTMLElement>("[data-session-expiry]");
+  const panelGrid = root?.querySelector<HTMLElement>("[data-panel-grid]");
+  const logoutButton = root?.querySelector<HTMLButtonElement>("[data-logout-button]");
+  const writeButton = root?.querySelector<HTMLButtonElement>("[data-write-button]");
+  const writeStatus = root?.querySelector<HTMLElement>("[data-write-status]");
+  const apiUrl = root?.getAttribute("data-api-url")?.trim() || "";
+  const client = apiUrl ? new DragonBoatApiClient({ baseUrl: apiUrl }) : null;
+  let sessionToken = "";
+  let pendingWriteRequestId: string | null = null;
+
+  function setStatus(element: HTMLElement | null | undefined, message: string, state = "") {
+    if (!element) return;
+    element.textContent = message;
+    element.dataset.state = state;
+  }
+
+  function setLoginBusy(busy: boolean) {
+    if (loginButton) loginButton.disabled = busy || !client;
+    if (codeInput) codeInput.disabled = busy || !client;
+  }
+
+  function showLogin(message = "") {
+    sessionToken = "";
+    if (loginPanel) loginPanel.hidden = false;
+    if (workspace) workspace.hidden = true;
+    if (panelGrid) panelGrid.replaceChildren();
+    if (writeStatus) setStatus(writeStatus, "");
+    setStatus(loginStatus, message, message ? "error" : "");
+    setLoginBusy(false);
+  }
+
+  function showWorkspace(data: any) {
+    if (loginPanel) loginPanel.hidden = true;
+    if (workspace) workspace.hidden = false;
+    if (coachName) coachName.textContent = data.coach.display_name;
+    if (sessionExpiry) {
+      sessionExpiry.textContent = `会话有效至 ${new Date(data.session.expires_at).toLocaleString()}`;
+    }
+    if (panelGrid) {
+      panelGrid.replaceChildren(...data.panels.map((panel: any) => {
+        const card = document.createElement("section");
+        card.className = "dragon-boat-panel-card";
+        const title = document.createElement("h3");
+        title.textContent = panel.label;
+        const status = document.createElement("p");
+        status.textContent = panel.available ? "可用" : "将在后续阶段接入";
+        card.append(title, status);
+        return card;
+      }));
+    }
+  }
+
+  function messageForError(error: unknown) {
+    const code = error instanceof DragonBoatApiError ? error.code : "UNKNOWN_ERROR";
+    const messages: Record<string, string> = {
+      COACH_CODE_INVALID: "Coach Code 不正确。",
+      LOGIN_RATE_LIMITED: "尝试次数过多，请稍后再试。",
+      SESSION_EXPIRED: "管理会话已过期，请重新输入 Coach Code。",
+      SESSION_REVOKED: "这次管理会话已经失效，请重新登录。",
+      SESSION_INVALID: "无法验证管理会话，请重新登录。",
+      CONFIGURATION_REQUIRED: "后端尚未完成 Coach Mode 配置。",
+      CONFIGURATION_ERROR: "后端管理数据配置有误。",
+      SERVICE_BUSY: "系统正在处理其他修改，请使用同一请求重试。",
+      NETWORK_ERROR: "暂时无法连接训练服务。",
+      REQUEST_TIMEOUT: "请求超时；系统会保留同一请求编号供重试。"
+    };
+    return messages[code] || "操作没有完成，请稍后重试。";
+  }
+
+  async function bootstrap(token: string) {
+    if (!client) return;
+    const response = await client.post("coachBootstrap", { session_token: token });
+    sessionToken = token;
+    showWorkspace(response.data);
+  }
+
+  loginForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!client || !codeInput) return;
+    const coachCode = codeInput.value;
+    codeInput.value = "";
+    setLoginBusy(true);
+    setStatus(loginStatus, "正在验证……", "pending");
+    try {
+      const response = await client.post("coachLogin", { coach_code: coachCode });
+      sessionToken = response.data.session_token;
+      saveCoachSession(sessionToken, response.data.session);
+      await bootstrap(sessionToken);
+      setStatus(loginStatus, "");
+    } catch (error) {
+      clearCoachSession();
+      showLogin(messageForError(error));
+    } finally {
+      setLoginBusy(false);
+    }
+  });
+
+  logoutButton?.addEventListener("click", async () => {
+    const token = sessionToken;
+    clearCoachSession();
+    showLogin("本机已退出 Coach Mode。");
+    if (!client || !token) return;
+    try {
+      await client.post("coachLogout", { session_token: token });
+      setStatus(loginStatus, "已退出 Coach Mode。", "ready");
+    } catch {
+      setStatus(loginStatus, "本机已退出；后端会话将在到期后自动失效。", "pending");
+    }
+  });
+
+  writeButton?.addEventListener("click", async () => {
+    if (!client || !sessionToken || !writeButton) return;
+    pendingWriteRequestId ||= createRequestId();
+    writeButton.disabled = true;
+    setStatus(writeStatus, "正在验证受保护写入……", "pending");
+    try {
+      const response = await client.post(
+        "coachConnectivityWrite",
+        { session_token: sessionToken },
+        { requestId: pendingWriteRequestId }
+      );
+      setStatus(writeStatus, `写入成功：${response.data.write_id}`, "ready");
+      pendingWriteRequestId = null;
+    } catch (error) {
+      if (isCoachSessionError(error)) {
+        clearCoachSession();
+        showLogin(messageForError(error));
+      } else {
+        setStatus(writeStatus, messageForError(error), "error");
+        if (!(error instanceof DragonBoatApiError) || !error.retryable) {
+          pendingWriteRequestId = null;
+        }
+      }
+    } finally {
+      writeButton.disabled = false;
+    }
+  });
+
+  if (!client) {
+    showLogin("等待配置测试 Apps Script Web App 地址后即可登录。");
+  } else {
+    const stored = loadCoachSession();
+    if (stored) {
+      bootstrap(stored.token).catch((error) => {
+        clearCoachSession();
+        showLogin(messageForError(error));
+      });
+    } else {
+      showLogin();
+    }
+  }
+</script>

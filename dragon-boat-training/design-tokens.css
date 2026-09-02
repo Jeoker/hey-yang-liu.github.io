@@ -1,0 +1,24 @@
+/* Temporary palette sampled from the supplied low-resolution team reference.
+   Scoped to this project; not imported into the portfolio application. */
+.dragon-boat-app {
+  --db-color-primary: #597694;
+  --db-color-primary-strong: #425d7a;
+  --db-color-primary-soft: #eaf0f5;
+  --db-color-secondary: #658f99;
+  --db-color-secondary-strong: #3e6b75;
+  --db-color-secondary-soft: #eaf3f3;
+  --db-color-background: #f4f7f8;
+  --db-color-surface: #ffffff;
+  --db-color-text: #233746;
+  --db-color-text-muted: #536773;
+  --db-color-border: #c6d3d8;
+  --db-color-on-primary: #ffffff;
+  --db-color-focus: #425d7a;
+  --db-color-error: #a13d43;
+  --db-color-warning: #805615;
+  --db-font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --db-radius-control: 0.625rem;
+  --db-radius-panel: 1rem;
+  --db-logo-size-header: 3rem;
+  --db-logo-size-history: 5rem;
+}

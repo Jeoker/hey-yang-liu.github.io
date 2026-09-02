@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_version": "2026-08-31.p0.2",
+  "service": "dragon-boat-training",
+  "transport": {
+    "get_action_parameter": "action",
+    "post_content_type": "text/plain;charset=UTF-8",
+    "post_body": "JSON object",
+    "redirect": "follow",
+    "management_transport": "POST body only; session_token is never placed in a URL"
+  },
+  "request": {
+    "request_id": "8 to 128 ASCII letters, numbers, underscores or hyphens",
+    "action": "required action name"
+  },
+  "response": {
+    "success": {
+      "ok": true,
+      "data": "action-specific object",
+      "meta": {
+        "contract_version": "2026-08-31.p0.2",
+        "server_time": "ISO 8601 timestamp",
+        "request_id": "request identifier"
+      }
+    },
+    "failure": {
+      "ok": false,
+      "error": {
+        "code": "stable error code",
+        "message": "safe user-facing message",
+        "retryable": "boolean"
+      },
+      "meta": {
+        "contract_version": "2026-08-31.p0.2",
+        "server_time": "ISO 8601 timestamp",
+        "request_id": "request identifier"
+      }
+    }
+  },
+  "actions": {
+    "health": {
+      "methods": ["GET", "POST"],
+      "authentication": "public",
+      "writes_data": false
+    },
+    "coachLogin": {
+      "methods": ["POST"],
+      "authentication": "coach_code",
+      "request_fields": ["coach_code"],
+      "response_fields": ["session_token", "session.coach_id", "session.display_name", "session.issued_at", "session.expires_at"],
+      "writes_data": true,
+      "notes": "The plain Coach Code is validated but never stored in a sheet or response."
+    },
+    "coachBootstrap": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token"],
+      "response_fields": ["coach", "session", "panels", "p0_connectivity_write_available"],
+      "writes_data": false
+    },
+    "coachConnectivityWrite": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token"],
+      "response_fields": ["write_id", "status"],
+      "writes_data": true,
+      "notes": "P0-only protected write. It appends one idempotent system audit event and does not change season, member, practice, signup or seat data."
+    },
+    "coachLogout": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token"],
+      "response_fields": ["session_id", "revoked"],
+      "writes_data": true
+    }
+  },
+  "management_errors": [
+    "COACH_CODE_INVALID",
+    "LOGIN_RATE_LIMITED",
+    "SESSION_INVALID",
+    "SESSION_EXPIRED",
+    "SESSION_REVOKED",
+    "IDEMPOTENCY_CONFLICT",
+    "SERVICE_BUSY",
+    "CONFIGURATION_REQUIRED",
+    "CONFIGURATION_ERROR",
+    "RECOVERY_REQUIRED"
+  ]
+}

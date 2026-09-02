@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="title desc">
+  <title id="title">队伍 Logo 占位</title>
+  <desc id="desc">灰蓝字母 P 与青绿水波，仅为占位图，等待正式高清 Logo。</desc>
+  <circle cx="48" cy="48" r="44" fill="#FFFFFF" stroke="#597694" stroke-width="2"/>
+  <path d="M37 58V26H49C58 26 64 31 64 39C64 47 58 52 49 52H44V58Z M44 32V46H49C54 46 57 44 57 39C57 34 54 32 49 32Z" fill="#597694" fill-rule="evenodd"/>
+  <path d="M24 65C32 59 40 71 48 65S64 59 72 65M28 74C35 69 42 79 49 74S62 69 68 74" fill="none" stroke="#658F99" stroke-width="3" stroke-linecap="round"/>
+</svg>
