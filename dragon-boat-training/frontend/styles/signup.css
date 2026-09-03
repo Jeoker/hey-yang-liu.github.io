@@ -1,0 +1,48 @@
+.dragon-boat-signup-panel {
+  max-width: 58rem;
+  margin-top: 1.5rem;
+  border: 1px solid var(--db-color-border);
+  border-radius: var(--db-radius-panel);
+  padding: clamp(1.2rem, 4vw, 1.75rem);
+  background: var(--db-color-surface);
+  scroll-margin-top: 1rem;
+}
+
+.dragon-boat-signup-panel h2,
+.dragon-boat-signup-panel h3 { margin: 0; }
+.dragon-boat-signup-panel > p { line-height: 1.65; }
+.dragon-boat-signup-meta { color: var(--db-color-text-muted); }
+.dragon-boat-signup-counts { font-weight: 700; }
+.dragon-boat-signup-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; margin-top: 1rem; }
+.dragon-boat-signup-group { min-width: 0; border: 1px solid var(--db-color-border); border-radius: var(--db-radius-control); padding: 0.9rem; background: var(--db-color-background); }
+.dragon-boat-signup-group:nth-child(n + 4) { grid-column: 1 / -1; }
+.dragon-boat-signup-group h4 { margin: 0 0 0.65rem; font-size: 0.88rem; }
+.dragon-boat-signup-group ul { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.dragon-boat-signup-group li { display: flex; flex-direction: column; gap: 0.15rem; overflow-wrap: anywhere; }
+.dragon-boat-signup-group li span,
+.dragon-boat-signup-empty { margin: 0; color: var(--db-color-text-muted); font-size: 0.78rem; }
+.dragon-boat-signup-form { margin-top: 1.5rem; border-top: 1px solid var(--db-color-border); padding-top: 1.25rem; }
+.dragon-boat-signup-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem; margin-top: 1rem; }
+.dragon-boat-signup-fields label { display: grid; gap: 0.4rem; color: var(--db-color-text-muted); font-size: 0.86rem; font-weight: 650; }
+.dragon-boat-signup-fields input,
+.dragon-boat-signup-fields select { min-width: 0; width: 100%; border: 1px solid var(--db-color-border); border-radius: var(--db-radius-control); padding: 0.75rem; color: var(--db-color-text); background: #fff; font: inherit; }
+.dragon-boat-signup-fields select[size] { min-height: 9rem; }
+.dragon-boat-signup-fields input:focus,
+.dragon-boat-signup-fields select:focus { outline: 3px solid var(--db-color-primary-soft); border-color: var(--db-color-primary); }
+.dragon-boat-signup-member-field { grid-row: span 2; }
+.dragon-boat-signup-confirm { margin-top: 1rem; border: 1px solid var(--db-color-secondary); border-radius: var(--db-radius-control); padding: 1rem; background: var(--db-color-secondary-soft); }
+.dragon-boat-signup-confirm p { margin: 0; line-height: 1.65; }
+.dragon-boat-signup-warning { margin: 0.75rem 0; color: var(--db-color-warning); font-size: 0.86rem; line-height: 1.65; }
+.dragon-boat-signup-status { min-height: 1.5rem; margin-top: 1rem; line-height: 1.65; overflow-wrap: anywhere; }
+.dragon-boat-signup-status[data-state="error"] { color: var(--db-color-error); }
+.dragon-boat-signup-status[data-state="ready"] { color: var(--db-color-secondary-strong); }
+.dragon-boat-practice-card button { margin-top: 0.5rem; }
+.dragon-boat-practice-card .dragon-boat-practice-state { font-weight: 700; }
+.dragon-boat-app [hidden] { display: none !important; }
+
+@media (max-width: 42rem) {
+  .dragon-boat-signup-groups,
+  .dragon-boat-signup-fields { grid-template-columns: 1fr; }
+  .dragon-boat-signup-group:nth-child(n + 4) { grid-column: auto; }
+  .dragon-boat-signup-panel .dragon-boat-section-heading { align-items: stretch; flex-direction: column; }
+}

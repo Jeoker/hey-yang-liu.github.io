@@ -1,4 +1,4 @@
-export const DRAGON_BOAT_CONTRACT_VERSION = "2026-09-02.p1.1";
+export const DRAGON_BOAT_CONTRACT_VERSION = "2026-09-02.p2.1";
 
 export class DragonBoatApiError extends Error {
   constructor(code, message, options = {}) {
@@ -90,7 +90,7 @@ export class DragonBoatApiClient {
         throw new DragonBoatApiError(
           "INVALID_RESPONSE",
           "The training service returned an unreadable response.",
-          { cause: error, requestId }
+          { cause: error, requestId, retryable: true }
         );
       }
 
@@ -168,13 +168,13 @@ export function normalizeApiUrl(value) {
 
 function assertEnvelope(envelope, requestId) {
   if (!envelope || typeof envelope !== "object" || typeof envelope.ok !== "boolean" || !envelope.meta) {
-    throw new DragonBoatApiError("INVALID_RESPONSE", "The training service response is incomplete.", { requestId });
+    throw new DragonBoatApiError("INVALID_RESPONSE", "The training service response is incomplete.", { requestId, retryable: true });
   }
   if (envelope.meta.contract_version !== DRAGON_BOAT_CONTRACT_VERSION) {
     throw new DragonBoatApiError(
       "CONTRACT_MISMATCH",
       "The website and training service versions do not match.",
-      { requestId: envelope.meta.request_id || requestId }
+      { requestId: envelope.meta.request_id || requestId, retryable: true }
     );
   }
 }

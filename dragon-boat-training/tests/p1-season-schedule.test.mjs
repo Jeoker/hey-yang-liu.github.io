@@ -289,3 +289,150 @@ test("P1 setup creates only one scheduled week publisher", async () => {
     1
   );
 });
+
+async function prepareWeekRecoveryFixture() {
+  const backend = await createBackend();
+  const fixture = backend.createFormBinding();
+  const token = login(backend.context);
+  const created = createSeason(backend.context, token);
+  const initialized = post(
+    backend.context,
+    bindingBody(created.data.season, token, fixture, "initializeSeason", "recovery_initialize")
+  );
+  const templates = [
+    { day_of_week: 3, start_time: "18:00", end_time: "20:00", location: "Original Dock", address: "1 River Road", map_url: "" },
+    { day_of_week: 6, start_time: "10:00", end_time: "12:00", location: "Original Dock", address: "1 River Road", map_url: "" }
+  ];
+  const saved = post(backend.context, {
+    action: "updateScheduleTemplates", request_id: "recovery_templates", session_token: token,
+    season_id: initialized.data.season.season_id, season_version: initialized.data.season.season_version,
+    templates
+  });
+  assert.equal(saved.ok, true, JSON.stringify(saved));
+  const season = saved.data.season;
+  return {
+    backend, fixture, token, season, templates,
+    body: {
+      action: "updateTrainingWeek", request_id: "recovery_prepare_week", session_token: token,
+      season_id: season.season_id, season_version: season.season_version, week_start_date: "2026-09-07"
+    }
+  };
+}
+
+test("week generation recovers every persisted stage without an empty week or duplicate event", async (t) => {
+  for (const stage of ["week", "practice", "result", "audit", "completed"]) {
+    await t.test(stage, async () => {
+      const { backend, fixture, body } = await prepareWeekRecoveryFixture();
+      const originalAppend = backend.context.appendSeasonSheetRecord_;
+      const originalUpdate = backend.context.updateSheetRecord_;
+      backend.context.appendSeasonSheetRecord_ = (season, sheetName, record) => {
+        const result = originalAppend(season, sheetName, record);
+        if (
+          (stage === "week" && sheetName === "TrainingWeeks") ||
+          (stage === "practice" && sheetName === "Practices") ||
+          (stage === "audit" && sheetName === "AuditLog" && record.action === "TRAINING_WEEK_PREPARED")
+        ) throw new Error(`Interrupted after ${stage}`);
+        return result;
+      };
+      backend.context.updateSheetRecord_ = (sheetName, record) => {
+        const result = originalUpdate(sheetName, record);
+        if (sheetName === "SystemRequests" && record.action === "updateTrainingWeek") {
+          const saved = JSON.parse(record.result_json);
+          if (
+            (stage === "result" && saved.result) ||
+            (stage === "completed" && record.status === "COMPLETED")
+          ) throw new Error(`Interrupted after ${stage}`);
+        }
+        return result;
+      };
+      const interrupted = post(backend.context, body);
+      assert.equal(interrupted.ok, false);
+      assert.equal(interrupted.error.code, "INTERNAL_ERROR");
+      backend.context.appendSeasonSheetRecord_ = originalAppend;
+      backend.context.updateSheetRecord_ = originalUpdate;
+
+      const recovered = post(backend.context, body);
+      assert.equal(recovered.ok, true, JSON.stringify(recovered));
+      assert.equal(recovered.data.practices.length, 2);
+      assert.equal(sheetRecords(fixture.runtimeSpreadsheet, "TrainingWeeks").length, 1);
+      assert.equal(sheetRecords(fixture.runtimeSpreadsheet, "Practices").length, 2);
+      assert.equal(
+        sheetRecords(fixture.runtimeSpreadsheet, "AuditLog").filter((event) => event.action === "TRAINING_WEEK_PREPARED").length,
+        1
+      );
+      assert.deepEqual(post(backend.context, body).data, recovered.data);
+    });
+  }
+});
+
+test("week recovery uses the accepted templates and preserves adjusted or cancelled instances", async () => {
+  const { backend, fixture, token, season, templates, body } = await prepareWeekRecoveryFixture();
+  const originalAppend = backend.context.appendSeasonSheetRecord_;
+  backend.context.appendSeasonSheetRecord_ = (storedSeason, sheetName, record) => {
+    const result = originalAppend(storedSeason, sheetName, record);
+    if (sheetName === "Practices") throw new Error("Interrupted after first instance");
+    return result;
+  };
+  assert.equal(post(backend.context, body).ok, false);
+  backend.context.appendSeasonSheetRecord_ = originalAppend;
+
+  const storedSeason = backend.context.requireSeason_(season.season_id);
+  const firstPractice = backend.context.getSeasonSheetRecords_(storedSeason, "Practices")[0];
+  firstPractice.location = "Adjusted Dock";
+  firstPractice.cancelled_at = "2026-09-02T12:00:00.000Z";
+  firstPractice.practice_version = 2;
+  backend.context.updateSeasonSheetRecord_(storedSeason, "Practices", firstPractice);
+  const changedTemplates = post(backend.context, {
+    action: "updateScheduleTemplates", request_id: "recovery_changed_templates", session_token: token,
+    season_id: season.season_id, season_version: season.season_version,
+    templates: templates.map((template) => ({ ...template, day_of_week: 7, location: "New Default Dock" }))
+  });
+  assert.equal(changedTemplates.ok, true, JSON.stringify(changedTemplates));
+
+  const recovered = post(backend.context, body);
+  assert.equal(recovered.ok, true, JSON.stringify(recovered));
+  assert.equal(recovered.data.practices.length, 2);
+  const practices = sheetRecords(fixture.runtimeSpreadsheet, "Practices");
+  assert.equal(practices[0].location, "Adjusted Dock");
+  assert.ok(practices[0].cancelled_at);
+  assert.equal(practices[0].practice_version, "2");
+  assert.equal(practices[1].location, "Original Dock");
+  assert.equal(practices[1].start_at, "2026-09-12T14:00:00.000Z");
+  assert.equal(practices[1].created_at, practices[0].created_at);
+});
+
+test("completed and new generation requests never recreate a removed instance of an existing week", async () => {
+  const { backend, fixture, body } = await prepareWeekRecoveryFixture();
+  const completed = post(backend.context, body);
+  assert.equal(completed.ok, true);
+  const practiceSheet = fixture.runtimeSpreadsheet.getSheetByName("Practices");
+  practiceSheet.rows.splice(1, 1);
+
+  const replay = post(backend.context, body);
+  assert.deepEqual(replay.data, completed.data);
+  assert.equal(sheetRecords(fixture.runtimeSpreadsheet, "Practices").length, 1);
+  const newRequest = post(backend.context, { ...body, request_id: "recovery_existing_week" });
+  assert.equal(newRequest.ok, true);
+  assert.equal(newRequest.data.practices.length, 1);
+  assert.equal(sheetRecords(fixture.runtimeSpreadsheet, "Practices").length, 1);
+});
+
+test("an unfinished legacy week without its generation plan requires review instead of reporting success", async () => {
+  const { backend, fixture, body } = await prepareWeekRecoveryFixture();
+  const originalAppend = backend.context.appendSeasonSheetRecord_;
+  backend.context.appendSeasonSheetRecord_ = (season, sheetName, record) => {
+    const result = originalAppend(season, sheetName, record);
+    if (sheetName === "TrainingWeeks") throw new Error("Interrupted after week");
+    return result;
+  };
+  assert.equal(post(backend.context, body).ok, false);
+  backend.context.appendSeasonSheetRecord_ = originalAppend;
+  const request = backend.context.getSheetRecords_("SystemRequests").find((record) => record.action === "updateTrainingWeek");
+  request.result_json = JSON.stringify({ week_id: sheetRecords(fixture.runtimeSpreadsheet, "TrainingWeeks")[0].week_id });
+  backend.context.updateSheetRecord_("SystemRequests", request);
+
+  const replay = post(backend.context, body);
+  assert.equal(replay.ok, false);
+  assert.equal(replay.error.code, "RECOVERY_REQUIRED");
+  assert.equal(sheetRecords(fixture.runtimeSpreadsheet, "Practices").length, 0);
+});

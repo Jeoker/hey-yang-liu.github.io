@@ -1,6 +1,8 @@
 ---
 import logoUrl from "../../assets/team-logo-placeholder.svg";
 import "../styles/app.css";
+import "../styles/member-management.css";
+import "../styles/signup.css";
 
 const basePath = import.meta.env.BASE_URL.endsWith("/")
   ? import.meta.env.BASE_URL
@@ -64,12 +66,13 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       <section class="dragon-boat-management-console" aria-labelledby="season-management-title">
         <div class="dragon-boat-section-heading">
           <div>
-            <p class="dragon-boat-session-label">P1 管理流程</p>
+            <p class="dragon-boat-session-label">赛季管理</p>
             <h3 id="season-management-title">赛季、名单与周训练</h3>
           </div>
           <button type="button" class="dragon-boat-secondary-button" data-refresh-button>刷新</button>
         </div>
         <p class="dragon-boat-form-status" data-management-status aria-live="polite"></p>
+        <button type="button" class="dragon-boat-secondary-button" data-management-retry hidden>按原内容重试上次操作</button>
 
         <div class="dragon-boat-season-picker">
           <label for="season-picker">当前查看</label>
@@ -149,6 +152,87 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
         </section>
       </section>
 
+      <section class="dragon-boat-management-console dragon-boat-member-console" data-member-console hidden aria-labelledby="member-management-title">
+        <div class="dragon-boat-section-heading">
+          <div>
+            <p class="dragon-boat-session-label">队员与训练</p>
+            <h3 id="member-management-title">队员及报名维护</h3>
+          </div>
+          <button type="button" class="dragon-boat-secondary-button" data-member-refresh>刷新名单与报名</button>
+        </div>
+        <p class="dragon-boat-form-status" data-member-console-status aria-live="polite"></p>
+
+        <details class="dragon-boat-management-block" open>
+          <summary>赛季队员名册</summary>
+          <p>原始表单姓名保留不变。这里的修正姓名和默认偏好会用于之后的训练；修改默认偏好不会改动已有报名。</p>
+          <div class="dragon-boat-member-layout">
+            <div class="dragon-boat-member-search">
+              <label for="managed-member-search">搜索姓名<input id="managed-member-search" type="search" autocomplete="off" data-member-search /></label>
+              <label for="managed-member-picker">选择队员<select id="managed-member-picker" size="7" data-member-picker></select></label>
+              <p data-member-count></p>
+            </div>
+            <div data-member-detail hidden>
+              <dl class="dragon-boat-member-facts">
+                <div><dt>表单原始姓名</dt><dd data-member-source></dd></div>
+                <div><dt>当前显示姓名</dt><dd data-member-current-name></dd></div>
+                <div><dt>状态及版本</dt><dd data-member-state></dd></div>
+              </dl>
+              <form data-member-edit-form>
+                <fieldset class="dragon-boat-form-grid" data-member-edit-fields>
+                  <label>修正姓名（留空则使用表单姓名）<input name="display_name_override" maxlength="120" autocomplete="off" /></label>
+                  <label>默认侧向偏好<select name="default_preference"><option value="LEFT">Left · 左侧</option><option value="AMBIENT">Ambient · 左右均可</option><option value="RIGHT">Right · 右侧</option></select></label>
+                  <p class="dragon-boat-field-wide dragon-boat-change-preview" data-member-preview></p>
+                  <div class="dragon-boat-button-row dragon-boat-field-wide">
+                    <button type="submit" class="dragon-boat-primary-button">保存队员资料</button>
+                    <button type="button" class="dragon-boat-secondary-button" data-member-restore>恢复表单姓名</button>
+                  </div>
+                </fieldset>
+              </form>
+              <div class="dragon-boat-member-links" data-member-links></div>
+              <div class="dragon-boat-member-status-action">
+                <label class="dragon-boat-check-label"><input type="checkbox" data-member-status-confirm /><span data-member-status-explanation></span></label>
+                <button type="button" class="dragon-boat-secondary-button" data-member-status-button></button>
+              </div>
+            </div>
+          </div>
+          <p class="dragon-boat-form-status" data-member-edit-status aria-live="polite"></p>
+          <button type="button" class="dragon-boat-secondary-button" data-member-retry hidden>按原内容重试并确认结果</button>
+        </details>
+
+        <section class="dragon-boat-management-block" aria-labelledby="signup-management-title">
+          <h3 id="signup-management-title">单次训练报名清单</h3>
+          <p>管理员可以代报名、直接改偏好或取消报名。普通报名截止后仍可管理，训练结束后报名记录只读。</p>
+          <div class="dragon-boat-inline-form">
+            <label>选择已发布训练<select data-managed-practice-picker></select></label>
+            <button type="button" class="dragon-boat-secondary-button" data-managed-practice-refresh>刷新这次训练</button>
+          </div>
+          <p class="dragon-boat-form-status" data-managed-practice-status aria-live="polite"></p>
+          <div data-managed-practice-detail hidden>
+            <p data-managed-practice-meta></p>
+            <p data-managed-practice-counts></p>
+            <div data-managed-signup-list></div>
+            <form data-managed-signup-form>
+              <fieldset class="dragon-boat-form-grid" data-managed-signup-fields>
+                <label>搜索队员<input type="search" autocomplete="off" data-managed-signup-search /></label>
+                <label>本次操作的队员<select data-managed-signup-member required></select></label>
+                <label>本次训练偏好<select name="preference"><option value="LEFT">Left · 左侧</option><option value="AMBIENT">Ambient · 左右均可</option><option value="RIGHT">Right · 右侧</option></select></label>
+                <p data-managed-signup-current></p>
+                <p class="dragon-boat-field-wide dragon-boat-change-preview" data-managed-signup-preview></p>
+                <div class="dragon-boat-button-row dragon-boat-field-wide">
+                  <button type="submit" class="dragon-boat-primary-button" data-managed-signup-submit>代为报名</button>
+                </div>
+                <div class="dragon-boat-field-wide dragon-boat-cancel-signup" data-managed-signup-cancel-area hidden>
+                  <label class="dragon-boat-check-label"><input type="checkbox" data-managed-signup-cancel-confirm /><span data-managed-signup-cancel-text></span></label>
+                  <button type="button" class="dragon-boat-secondary-button" data-managed-signup-cancel>取消所选队员报名</button>
+                </div>
+              </fieldset>
+            </form>
+          </div>
+          <p class="dragon-boat-form-status" data-managed-signup-status aria-live="polite"></p>
+          <button type="button" class="dragon-boat-secondary-button" data-managed-signup-retry hidden>按原内容重试并确认结果</button>
+        </section>
+      </section>
+
       <details class="dragon-boat-connectivity-panel">
         <summary>P0 连接诊断</summary>
         <p>这项测试只向系统审计日志写入一条无业务副作用的事件。</p>
@@ -164,6 +248,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
 <script>
   import { DragonBoatApiClient, DragonBoatApiError, createRequestId } from "../lib/api-client.js";
   import { clearCoachSession, isCoachSessionError, loadCoachSession, saveCoachSession } from "../lib/coach-session.js";
+  import { renderSignupList, signupResultText } from "../lib/signup-view.js";
 
   const root = document.querySelector<HTMLElement>("[data-coach-mode-app]");
   const q = <T extends HTMLElement>(selector: string) => root?.querySelector<T>(selector) || null;
@@ -179,6 +264,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const logoutButton = q<HTMLButtonElement>("[data-logout-button]");
   const refreshButton = q<HTMLButtonElement>("[data-refresh-button]");
   const managementStatus = q<HTMLElement>("[data-management-status]");
+  const managementRetry = q<HTMLButtonElement>("[data-management-retry]");
   const seasonPicker = q<HTMLSelectElement>("[data-season-picker]");
   const createSeasonForm = q<HTMLFormElement>("[data-create-season-form]");
   const createSeasonDetails = q<HTMLDetailsElement>("[data-create-season-details]");
@@ -202,12 +288,65 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const additionalWeek = q<HTMLSelectElement>("[data-additional-week]");
   const writeButton = q<HTMLButtonElement>("[data-write-button]");
   const writeStatus = q<HTMLElement>("[data-write-status]");
+  const memberConsole = q<HTMLElement>("[data-member-console]");
+  const memberConsoleStatus = q<HTMLElement>("[data-member-console-status]");
+  const memberRefresh = q<HTMLButtonElement>("[data-member-refresh]");
+  const memberSearch = q<HTMLInputElement>("[data-member-search]");
+  const memberPicker = q<HTMLSelectElement>("[data-member-picker]");
+  const memberDetail = q<HTMLElement>("[data-member-detail]");
+  const memberCount = q<HTMLElement>("[data-member-count]");
+  const memberSource = q<HTMLElement>("[data-member-source]");
+  const memberCurrentName = q<HTMLElement>("[data-member-current-name]");
+  const memberState = q<HTMLElement>("[data-member-state]");
+  const memberEditForm = q<HTMLFormElement>("[data-member-edit-form]");
+  const memberEditFields = q<HTMLFieldSetElement>("[data-member-edit-fields]");
+  const memberPreview = q<HTMLElement>("[data-member-preview]");
+  const memberRestore = q<HTMLButtonElement>("[data-member-restore]");
+  const memberLinks = q<HTMLElement>("[data-member-links]");
+  const memberStatusConfirm = q<HTMLInputElement>("[data-member-status-confirm]");
+  const memberStatusExplanation = q<HTMLElement>("[data-member-status-explanation]");
+  const memberStatusButton = q<HTMLButtonElement>("[data-member-status-button]");
+  const memberEditStatus = q<HTMLElement>("[data-member-edit-status]");
+  const memberRetry = q<HTMLButtonElement>("[data-member-retry]");
+  const managedPracticePicker = q<HTMLSelectElement>("[data-managed-practice-picker]");
+  const managedPracticeRefresh = q<HTMLButtonElement>("[data-managed-practice-refresh]");
+  const managedPracticeStatus = q<HTMLElement>("[data-managed-practice-status]");
+  const managedPracticeDetail = q<HTMLElement>("[data-managed-practice-detail]");
+  const managedPracticeMeta = q<HTMLElement>("[data-managed-practice-meta]");
+  const managedPracticeCounts = q<HTMLElement>("[data-managed-practice-counts]");
+  const managedSignupList = q<HTMLElement>("[data-managed-signup-list]");
+  const managedSignupForm = q<HTMLFormElement>("[data-managed-signup-form]");
+  const managedSignupFields = q<HTMLFieldSetElement>("[data-managed-signup-fields]");
+  const managedSignupSearch = q<HTMLInputElement>("[data-managed-signup-search]");
+  const managedSignupMember = q<HTMLSelectElement>("[data-managed-signup-member]");
+  const managedSignupCurrent = q<HTMLElement>("[data-managed-signup-current]");
+  const managedSignupPreview = q<HTMLElement>("[data-managed-signup-preview]");
+  const managedSignupSubmit = q<HTMLButtonElement>("[data-managed-signup-submit]");
+  const managedSignupCancelArea = q<HTMLElement>("[data-managed-signup-cancel-area]");
+  const managedSignupCancelConfirm = q<HTMLInputElement>("[data-managed-signup-cancel-confirm]");
+  const managedSignupCancelText = q<HTMLElement>("[data-managed-signup-cancel-text]");
+  const managedSignupCancel = q<HTMLButtonElement>("[data-managed-signup-cancel]");
+  const managedSignupStatus = q<HTMLElement>("[data-managed-signup-status]");
+  const managedSignupRetry = q<HTMLButtonElement>("[data-managed-signup-retry]");
   const apiUrl = root?.getAttribute("data-api-url")?.trim() || "";
   const client = apiUrl ? new DragonBoatApiClient({ baseUrl: apiUrl, timeoutMs: 30000 }) : null;
-  const pendingRequests = new Map<string, string>();
+  const pendingRequests = new Map<string, { action: string; payload: Record<string, unknown>; requestId: string }>();
+  let managementWriting = false;
   let sessionToken = "";
   let currentSeasonData: any = null;
   let bindingValidated = false;
+  let seasonReadVersion = 0;
+  let p2ReadVersion = 0;
+  let practiceReadVersion = 0;
+  let p2SeasonId = "";
+  let managedMembers: any[] = [];
+  let managedPractice: any = null;
+  let membersFresh = false;
+  let practiceFresh = false;
+  let p2Busy = false;
+  let p2Refreshing = false;
+  let p2Pending: { kind: "member" | "signup"; action: string; payload: Record<string, any>; requestId: string; accepted?: boolean; result?: any; draft?: any } | null = null;
+  let draftAfterLogin: any = null;
 
   function setStatus(element: HTMLElement | null, message: string, state = "") {
     if (!element) return;
@@ -232,6 +371,16 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       BINDING_LOCKED: "赛季已经激活，不能替换它的表单绑定。",
       WEEK_START_NOT_MONDAY: "请选择一个周一作为本周起点。",
       SCHEDULE_TEMPLATES_REQUIRED: "请先保存至少一条默认训练模板。",
+      MEMBER_HAS_ACTIVE_LINKS: "这位队员仍关联未结束训练。请先处理下方列出的报名、座位或带队角色，再停用。",
+      MEMBER_INACTIVE: "这位队员已停用，不能为其新增或修改报名。请先核对队员状态。",
+      MEMBER_NOT_FOUND: "本季找不到这位队员，请刷新名册。",
+      SIGNUP_ALREADY_EXISTS: "这位队员已经报名。已更新清单，请使用修改偏好或取消入口。",
+      SIGNUP_NOT_FOUND: "这条报名已不存在或已取消，请核对刷新后的清单。",
+      PRACTICE_ENDED: "训练已经结束，报名记录只读；最终座位更正在后续排座阶段处理。",
+      PRACTICE_CANCELLED: "训练已取消，不能再修改报名。",
+      SIGNUP_CLOSED: "这次训练当前不接受报名修改，请核对服务器状态。",
+      ROLE_CONFLICT: "这位队员已担任本次训练的 Coach 或 Steerer，不能同时占用划桨名额。",
+      SEASON_NOT_OPEN: "赛季当前不可修改，请刷新赛季状态。",
       SERVICE_BUSY: "系统正在处理其他修改，请稍后使用同一请求重试。",
       NETWORK_ERROR: "暂时无法连接训练服务。",
       REQUEST_TIMEOUT: "请求超时；再次点击会沿用同一请求编号确认结果。"
@@ -239,21 +388,39 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     return messages[code] || (error instanceof Error ? error.message : "操作没有完成，请稍后重试。");
   }
 
-  function showLogin(message = "", state = "error") {
+  function showLogin(message = "", state = "error", preserveDraft = false) {
     sessionToken = "";
+    seasonReadVersion += 1;
     currentSeasonData = null;
+    pendingRequests.clear();
+    clearP2View();
+    if (!preserveDraft) draftAfterLogin = null;
     if (loginPanel) loginPanel.hidden = false;
     if (workspace) workspace.hidden = true;
     if (panelGrid) panelGrid.replaceChildren();
+    if (coachName) coachName.textContent = "Coach Mode";
+    if (sessionExpiry) sessionExpiry.textContent = "";
+    if (seasonPicker) seasonPicker.replaceChildren();
+    if (seasonTitle) seasonTitle.textContent = "";
+    if (seasonMeta) seasonMeta.textContent = "";
+    if (seasonSync) seasonSync.textContent = "";
+    if (adminWeekList) adminWeekList.replaceChildren();
+    if (templateRows) templateRows.replaceChildren();
+    if (additionalWeek) additionalWeek.replaceChildren();
+    bindingForm?.reset();
+    renderManagementRetry();
     setStatus(loginStatus, message, message ? state : "");
     if (loginButton) loginButton.disabled = !client;
     if (codeInput) codeInput.disabled = !client;
   }
 
   function protectedError(error: unknown) {
+    if (error instanceof DragonBoatApiError && error.code === "STALE_SESSION_RESPONSE") return true;
     if (isCoachSessionError(error)) {
+      const draft = captureP2Draft();
+      draftAfterLogin = draft ? { ...draft, pending: p2Pending } : null;
       clearCoachSession();
-      showLogin(messageForError(error));
+      showLogin(messageForError(error), "error", true);
       return true;
     }
     return false;
@@ -261,16 +428,36 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
 
   async function managedPost(action: string, payload: Record<string, unknown>, key: string) {
     if (!client || !sessionToken) throw new Error("Coach Mode is not connected.");
-    const requestId = pendingRequests.get(key) || createRequestId();
-    pendingRequests.set(key, requestId);
+    if (managementWriting) throw new DragonBoatApiError("REQUEST_IN_PROGRESS", "上一次操作仍在提交中，请等待服务器结果。");
+    const pendingEntry = [...pendingRequests.entries()][0];
+    if (pendingEntry && (pendingEntry[0] !== key || pendingEntry[1].action !== action || JSON.stringify(pendingEntry[1].payload) !== JSON.stringify(payload))) {
+      throw new DragonBoatApiError("REQUEST_PENDING", "上一次操作结果尚未确认。当前修改尚未发送，请点击「按原内容重试上次操作」先确认原操作。", { retryable: true });
+    }
+    const request = pendingEntry?.[1] || { action, payload: structuredClone(payload), requestId: createRequestId() };
+    const token = sessionToken;
+    pendingRequests.set(key, request);
+    managementWriting = true;
+    renderManagementRetry();
     try {
-      const response = await client.post(action, { session_token: sessionToken, ...payload }, { requestId });
+      const response = await client.post(request.action, { ...request.payload, session_token: token }, { requestId: request.requestId });
+      if (token !== sessionToken) throw new DragonBoatApiError("STALE_SESSION_RESPONSE", "已忽略旧会话返回的操作结果。");
       pendingRequests.delete(key);
       return response;
     } catch (error) {
-      if (!(error instanceof DragonBoatApiError) || !error.retryable) pendingRequests.delete(key);
+      if (error instanceof DragonBoatApiError && !error.retryable && !["INVALID_RESPONSE", "CONTRACT_MISMATCH"].includes(error.code)) pendingRequests.delete(key);
       throw error;
+    } finally {
+      managementWriting = false;
+      renderManagementRetry();
     }
+  }
+
+  function renderManagementRetry() {
+    if (managementRetry) {
+      managementRetry.hidden = !pendingRequests.size || !sessionToken;
+      managementRetry.disabled = managementWriting;
+    }
+    updateP2Controls();
   }
 
   function formObject(form: HTMLFormElement) {
@@ -285,7 +472,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       const title = document.createElement("h3");
       title.textContent = panel.label;
       const status = document.createElement("p");
-      status.textContent = panel.available ? "P1 功能已接入" : "将在后续阶段接入";
+      status.textContent = panel.available ? "已接入管理功能" : "将在后续阶段接入";
       card.append(title, status);
       return card;
     }));
@@ -293,12 +480,14 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
 
   async function refreshBootstrap(preferredSeasonId = "") {
     if (!client || !sessionToken) return;
-    const response = await client.post("coachBootstrap", { session_token: sessionToken });
+    const token = sessionToken;
+    const response = await client.post("coachBootstrap", { session_token: token });
+    if (token !== sessionToken) return;
     renderPanels(response.data.panels);
     if (coachName) coachName.textContent = response.data.coach.display_name;
     if (sessionExpiry) sessionExpiry.textContent = `会话有效至 ${new Date(response.data.session.expires_at).toLocaleString()}`;
     if (seasonPicker) {
-      const current = preferredSeasonId || seasonPicker.value || response.data.default_season_id || response.data.seasons[0]?.season_id || "";
+      const current = preferredSeasonId || draftAfterLogin?.seasonId || seasonPicker.value || response.data.default_season_id || response.data.seasons[0]?.season_id || "";
       seasonPicker.replaceChildren();
       const empty = document.createElement("option");
       empty.value = "";
@@ -321,17 +510,23 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     if (seasonDetail) seasonDetail.hidden = true;
     if (bindingBlock) bindingBlock.hidden = true;
     if (activeSeasonBlock) activeSeasonBlock.hidden = true;
+    clearP2View();
   }
 
   async function loadSeason(seasonId: string) {
     if (!client || !sessionToken || !seasonId) return clearSeasonView();
+    const token = sessionToken;
+    const readVersion = ++seasonReadVersion;
     setStatus(managementStatus, "正在读取赛季……", "pending");
     try {
       const response = await client.post("getSeasonManagement", { session_token: sessionToken, season_id: seasonId });
+      if (token !== sessionToken || readVersion !== seasonReadVersion) return;
       currentSeasonData = response.data;
       renderSeason();
+      await loadP2Season();
       setStatus(managementStatus, "");
     } catch (error) {
+      if (token !== sessionToken || readVersion !== seasonReadVersion) return;
       if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
     }
   }
@@ -355,6 +550,352 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     if (season.status === "OPEN") {
       renderTemplates(currentSeasonData.templates);
       renderAdminWeeks(currentSeasonData.weeks);
+    }
+  }
+
+  function captureP2Draft() {
+    if (!p2SeasonId) return null;
+    return {
+      seasonId: p2SeasonId,
+      memberId: memberPicker?.value || "",
+      memberFields: memberInputValues(),
+      practiceId: managedPracticePicker?.value || "",
+      signupMemberId: managedSignupMember?.value || "",
+      preference: (managedSignupForm?.elements.namedItem("preference") as HTMLSelectElement | null)?.value || "AMBIENT"
+    };
+  }
+
+  function memberInputValues() {
+    if (!memberEditForm) return null;
+    return {
+      display_name_override: (memberEditForm.elements.namedItem("display_name_override") as HTMLInputElement).value,
+      default_preference: (memberEditForm.elements.namedItem("default_preference") as HTMLSelectElement).value
+    };
+  }
+
+  function clearP2View() {
+    p2ReadVersion += 1;
+    practiceReadVersion += 1;
+    p2SeasonId = "";
+    managedMembers = [];
+    managedPractice = null;
+    membersFresh = false;
+    practiceFresh = false;
+    p2Pending = null;
+    p2Busy = false;
+    p2Refreshing = false;
+    if (memberConsole) memberConsole.hidden = true;
+    if (memberDetail) memberDetail.hidden = true;
+    if (managedPracticeDetail) managedPracticeDetail.hidden = true;
+    [memberPicker, managedPracticePicker, managedSignupMember, managedSignupList, memberLinks].forEach((element) => element?.replaceChildren());
+    [memberConsoleStatus, memberCount, memberSource, memberCurrentName, memberState, memberPreview, memberStatusExplanation, memberEditStatus,
+      managedPracticeStatus, managedPracticeMeta, managedPracticeCounts, managedSignupCurrent, managedSignupPreview, managedSignupCancelText, managedSignupStatus]
+      .forEach((element) => setStatus(element, ""));
+    if (memberSearch) memberSearch.value = "";
+    if (managedSignupSearch) managedSignupSearch.value = "";
+    memberEditForm?.reset();
+    managedSignupForm?.reset();
+    if (memberStatusConfirm) memberStatusConfirm.checked = false;
+    if (memberStatusButton) memberStatusButton.textContent = "";
+    updateP2Controls();
+  }
+
+  function currentMember() {
+    return managedMembers.find((member) => member.member_id === memberPicker?.value);
+  }
+
+  function currentManagedSignup() {
+    return managedPractice?.signups?.find((signup: any) => signup.member_id === managedSignupMember?.value);
+  }
+
+  function updateP2Controls() {
+    const locked = p2Busy || p2Refreshing || Boolean(p2Pending);
+    [memberSearch, memberPicker, memberRefresh, managedPracticePicker, managedPracticeRefresh].forEach((control) => {
+      if (control) control.disabled = locked;
+    });
+    if (memberEditFields) memberEditFields.disabled = locked || !membersFresh || !currentMember();
+    if (managedSignupFields) managedSignupFields.disabled = locked || !membersFresh || !practiceFresh || !managedPractice?.management_signup_open;
+    if (seasonPicker) seasonPicker.disabled = locked || pendingRequests.size > 0;
+    if (refreshButton) refreshButton.disabled = locked || pendingRequests.size > 0;
+    const member = currentMember();
+    const cannotDeactivate = member?.status === "ACTIVE" && member?.active_links?.length > 0;
+    if (memberStatusConfirm) memberStatusConfirm.disabled = locked || !membersFresh || !member || cannotDeactivate;
+    if (memberStatusButton) memberStatusButton.disabled = locked || !membersFresh || !member || cannotDeactivate || !memberStatusConfirm?.checked;
+    if (memberRestore) memberRestore.disabled = locked || !membersFresh || !member?.display_name_override;
+    if (memberRetry) {
+      memberRetry.hidden = p2Pending?.kind !== "member";
+      memberRetry.disabled = p2Busy || p2Refreshing || !sessionToken;
+      memberRetry.textContent = p2Pending?.accepted ? "重新读取已保存结果" : "按原内容重试并确认结果";
+    }
+    if (managedSignupRetry) {
+      managedSignupRetry.hidden = p2Pending?.kind !== "signup";
+      managedSignupRetry.disabled = p2Busy || p2Refreshing || !sessionToken;
+      managedSignupRetry.textContent = p2Pending?.accepted ? "重新读取已保存结果" : "按原内容重试并确认结果";
+    }
+    if (managedSignupCancel) managedSignupCancel.disabled = locked || !membersFresh || !practiceFresh || !managedSignupCancelConfirm?.checked || !managedPractice?.management_signup_open;
+    const signupMember = managedMembers.find((item) => item.member_id === managedSignupMember?.value);
+    if (managedSignupSubmit) managedSignupSubmit.disabled = locked || !membersFresh || !practiceFresh || !managedPractice?.management_signup_open || signupMember?.status !== "ACTIVE";
+  }
+
+  async function loadP2Season() {
+    const season = currentSeasonData?.season;
+    if (!season || season.status !== "OPEN") return clearP2View();
+    const changed = season.season_id !== p2SeasonId;
+    if (changed) clearP2View();
+    p2SeasonId = season.season_id;
+    const token = sessionToken;
+    if (memberConsole) memberConsole.hidden = false;
+    const draft = draftAfterLogin?.seasonId === p2SeasonId ? draftAfterLogin : p2Pending ? captureP2Draft() : null;
+    p2Refreshing = true;
+    updateP2Controls();
+    setStatus(memberConsoleStatus, "正在读取受保护名册与最新报名……", "pending");
+    try {
+      await loadManagedMembers(draft);
+      if (token !== sessionToken || p2SeasonId !== season.season_id) return;
+      renderManagedPracticePicker(draft?.practiceId);
+      await loadManagedPractice(draft);
+      if (token !== sessionToken || p2SeasonId !== season.season_id) return;
+      if (draft?.pending) {
+        p2Pending = draft.pending;
+        setStatus(p2Pending?.kind === "member" ? memberEditStatus : managedSignupStatus, p2Pending?.accepted
+          ? "会话已恢复，服务器此前已确认保存。请重新读取已保存结果，不会再次发送写入。"
+          : "会话已恢复，原请求内容及编号保持不变。请使用原内容重试按钮确认结果。", "pending");
+      }
+      setStatus(memberConsoleStatus, draft ? "已重新核对服务器版本。未提交的输入已恢复，请检查后再次确认。" : "名册与报名已更新。", "ready");
+      if (draft) draftAfterLogin = null;
+    } catch (error) {
+      if (token !== sessionToken || p2SeasonId !== season.season_id) return;
+      if (!protectedError(error)) setStatus(memberConsoleStatus, `读取失败，显示的数据可能已过期。${messageForError(error)}`, "error");
+    } finally {
+      if (token === sessionToken) {
+        p2Refreshing = false;
+        updateP2Controls();
+      }
+    }
+  }
+
+  async function loadManagedMembers(draft: any = null) {
+    if (!client || !sessionToken || !p2SeasonId) return;
+    const token = sessionToken;
+    const seasonId = p2SeasonId;
+    const revision = ++p2ReadVersion;
+    membersFresh = false;
+    const response = await client.post("listSeasonMembers", { session_token: token, season_id: seasonId });
+    if (token !== sessionToken || seasonId !== p2SeasonId || revision !== p2ReadVersion) return;
+    managedMembers = response.data.members;
+    membersFresh = true;
+    renderMemberPicker(draft?.memberId || memberPicker?.value);
+    renderMemberDetail(draft?.memberFields);
+    if (currentSeasonData?.season.season_id === seasonId) {
+      currentSeasonData.season.roster_version = response.data.roster_version;
+      if (seasonSync) seasonSync.textContent = `${managedMembers.length} 名队员 · 名单版本 ${response.data.roster_version} · 最近同步 ${currentSeasonData.season.last_sync_at ? new Date(currentSeasonData.season.last_sync_at).toLocaleString() : "尚无"}`;
+    }
+  }
+
+  function renderMemberPicker(preferred = "") {
+    if (!memberPicker) return;
+    const query = memberSearch?.value.trim().toLocaleLowerCase() || "";
+    const matches = managedMembers.filter((member) => `${member.display_name} ${member.source_display_name}`.toLocaleLowerCase().includes(query));
+    memberPicker.replaceChildren(...matches.map((member) => {
+      const option = document.createElement("option");
+      option.value = member.member_id;
+      option.textContent = `${member.display_name}${member.status === "INACTIVE" ? " · 已停用" : ""} · ${String(member.member_id).slice(-6)}`;
+      return option;
+    }));
+    memberPicker.value = matches.some((member) => member.member_id === preferred) ? preferred : matches[0]?.member_id || "";
+    if (memberCount) memberCount.textContent = `${matches.length} 个匹配结果 / 本季 ${managedMembers.length} 位队员（含停用）`;
+  }
+
+  function renderMemberDetail(fields: any = null) {
+    const member = currentMember();
+    if (memberDetail) memberDetail.hidden = !member;
+    if (!member || !memberEditForm) return updateP2Controls();
+    if (memberSource) memberSource.textContent = member.source_display_name;
+    if (memberCurrentName) memberCurrentName.textContent = member.display_name;
+    if (memberState) memberState.textContent = `${member.status === "ACTIVE" ? "有效" : "已停用"} · v${member.member_version}`;
+    (memberEditForm.elements.namedItem("display_name_override") as HTMLInputElement).value = String(fields?.display_name_override ?? member.display_name_override ?? "");
+    (memberEditForm.elements.namedItem("default_preference") as HTMLSelectElement).value = String(fields?.default_preference ?? member.default_preference ?? "AMBIENT");
+    if (memberStatusConfirm) memberStatusConfirm.checked = false;
+    if (memberStatusButton) memberStatusButton.textContent = member.status === "ACTIVE" ? "停用这位队员" : "重新启用这位队员";
+    if (memberStatusExplanation) memberStatusExplanation.textContent = member.status === "ACTIVE"
+      ? `我已核对，停用「${member.display_name}」后将不能再报名训练。`
+      : `我已核对，重新启用「${member.display_name}」恢复本季报名资格。`;
+    if (memberLinks) {
+      memberLinks.replaceChildren();
+      const title = document.createElement("p");
+      title.textContent = member.active_links?.length ? "停用前需要处理的未结束训练关联：" : "没有未结束训练关联，可按需要停用。";
+      memberLinks.append(title);
+      const list = document.createElement("ul");
+      (member.active_links || []).forEach((link: any) => {
+        const item = document.createElement("li");
+        const kind = ({ SIGNUP: "报名", SEAT: "座位", COACH: "Coach", STEERER: "Steerer" } as Record<string, string>)[link.kind] || link.kind;
+        item.textContent = `${new Date(link.start_at).toLocaleString()} · ${kind}`;
+        list.append(item);
+      });
+      memberLinks.append(list);
+    }
+    renderMemberPreview();
+    updateP2Controls();
+  }
+
+  function renderMemberPreview() {
+    const member = currentMember();
+    if (!member || !memberEditForm || !memberPreview) return;
+    const fields = memberInputValues()!;
+    const nextName = String(fields.display_name_override || "").trim() || member.source_display_name;
+    memberPreview.textContent = `保存后：${member.display_name} → ${nextName}；默认偏好 ${member.default_preference} → ${fields.default_preference}。成员编号、已有报名及排队时间保持不变。`;
+  }
+
+  function renderManagedPracticePicker(preferred = "") {
+    if (!managedPracticePicker) return;
+    const old = preferred || managedPracticePicker.value;
+    const practices = (currentSeasonData?.weeks || []).flatMap((item: any) => item.practices || [])
+      .filter((practice: any) => practice.schedule_published_at)
+      .sort((left: any, right: any) => String(left.start_at).localeCompare(String(right.start_at)));
+    managedPracticePicker.replaceChildren(...practices.map((practice: any) => {
+      const option = document.createElement("option");
+      option.value = practice.practice_id;
+      option.textContent = `${new Date(practice.start_at).toLocaleString()} · ${practice.location}${practice.cancelled_at || practice.cancelled ? " · 已取消" : ""}`;
+      return option;
+    }));
+    managedPracticePicker.value = practices.some((practice: any) => practice.practice_id === old) ? old : practices[0]?.practice_id || "";
+    if (!practices.length) setStatus(managedPracticeStatus, "本季尚无已发布训练。请先确认周计划或发布加场。");
+  }
+
+  async function loadManagedPractice(draft: any = null) {
+    if (!client || !sessionToken || !p2SeasonId) return;
+    const practiceId = managedPracticePicker?.value;
+    practiceFresh = false;
+    if (!practiceId) {
+      managedPractice = null;
+      if (managedPracticeDetail) managedPracticeDetail.hidden = true;
+      return updateP2Controls();
+    }
+    const token = sessionToken;
+    const seasonId = p2SeasonId;
+    const revision = ++practiceReadVersion;
+    setStatus(managedPracticeStatus, "正在读取最新训练报名……", "pending");
+    const response = await client.get("practice", { season_id: seasonId, practice_id: practiceId });
+    if (token !== sessionToken || seasonId !== p2SeasonId || revision !== practiceReadVersion || practiceId !== managedPracticePicker?.value) return;
+    managedPractice = response.data;
+    practiceFresh = true;
+    if (managedPracticeDetail) managedPracticeDetail.hidden = false;
+    const practice = managedPractice.practice;
+    if (managedPracticeMeta) managedPracticeMeta.textContent = `${new Date(practice.start_at).toLocaleString()} – ${new Date(practice.end_at).toLocaleString()} · ${practice.timezone} · ${practice.location} · 训练 v${practice.practice_version} / 报名 v${managedPractice.signup_version}`;
+    const counts = managedPractice.counts;
+    if (managedPracticeCounts) managedPracticeCounts.textContent = `已确认 ${counts.confirmed}/${counts.total_capacity} · 候补 ${counts.waitlisted} · Left ${counts.left}/${counts.left_capacity} · Ambient ${counts.ambient} · Right ${counts.right}/${counts.right_capacity}`;
+    if (managedSignupList) renderSignupList(managedSignupList, managedPractice.signups);
+    renderManagedSignupMemberPicker(draft?.signupMemberId || managedSignupMember?.value);
+    renderManagedSignupSelection(draft?.preference);
+    setStatus(managedPracticeStatus, managedPractice.management_signup_open
+      ? (managedPractice.signup_open ? "普通报名与管理操作均开放。" : "普通报名已截止，管理员仍可在训练结束前修改报名。")
+      : `报名记录只读。${closedPracticeMessage(managedPractice.closed_reason)}`, managedPractice.management_signup_open ? "ready" : "");
+    updateP2Controls();
+  }
+
+  function closedPracticeMessage(reason: string) {
+    return ({ PRACTICE_ENDED: "训练已经结束。", PRACTICE_CANCELLED: "训练已取消。", SEASON_COMPLETED: "赛季已完成。", SEASON_NOT_OPEN: "赛季未开放。", SIGNUP_CLOSED: "当前不接受报名修改。" } as Record<string, string>)[reason] || "以服务器最新状态为准。";
+  }
+
+  function renderManagedSignupMemberPicker(preferred = "") {
+    if (!managedSignupMember) return;
+    const query = managedSignupSearch?.value.trim().toLocaleLowerCase() || "";
+    const matches = managedMembers.filter((member) => member.display_name.toLocaleLowerCase().includes(query));
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = matches.length ? "请选择要操作的队员" : "没有匹配队员";
+    managedSignupMember.replaceChildren(empty, ...matches.map((member) => {
+      const signup = managedPractice?.signups?.find((item: any) => item.member_id === member.member_id);
+      const option = document.createElement("option");
+      option.value = member.member_id;
+      option.textContent = `${member.display_name} · ${signup ? signup.status === "CANCELLED" ? "已取消" : signup.status === "WAITLISTED" ? "候补" : "已确认" : "未报名"}${member.status === "INACTIVE" ? " · 已停用" : ""} · ${String(member.member_id).slice(-6)}`;
+      return option;
+    }));
+    managedSignupMember.value = matches.some((member) => member.member_id === preferred) ? preferred : "";
+  }
+
+  function renderManagedSignupSelection(preference = "") {
+    const member = managedMembers.find((item) => item.member_id === managedSignupMember?.value);
+    const signup = currentManagedSignup();
+    const active = signup && signup.status !== "CANCELLED";
+    const preferenceInput = managedSignupForm?.elements.namedItem("preference") as HTMLSelectElement | null;
+    if (preferenceInput) preferenceInput.value = preference || signup?.preference || member?.default_preference || "AMBIENT";
+    if (managedSignupCurrent) managedSignupCurrent.textContent = !member ? "请先选择队员。" : signup
+      ? `${member.display_name}：${signupResultText(signup)}${signup.queue_at ? ` · 原报名时间 ${new Date(signup.queue_at).toLocaleString()}` : ""}`
+      : `${member.display_name} 尚未报名。`;
+    if (managedSignupSubmit) managedSignupSubmit.textContent = active ? "保存本次偏好" : signup?.status === "CANCELLED" ? "按新时间重新报名" : "代为报名";
+    if (managedSignupCancelArea) managedSignupCancelArea.hidden = !active;
+    if (managedSignupCancelConfirm) managedSignupCancelConfirm.checked = false;
+    if (managedSignupCancelText) managedSignupCancelText.textContent = member ? `确认取消「${member.display_name}」的本次报名；重新报名将使用新时间排队。` : "";
+    if (managedSignupPreview) managedSignupPreview.textContent = active
+      ? "直接修改偏好保留原报名时间。放弃的原侧名额可能由候补递补，换回原侧不保证有位；目标侧没有名额时加入候补。"
+      : "报名成功后，服务器决定确认或候补及实际排队位置；已取消后重新报名使用新时间。";
+    updateP2Controls();
+  }
+
+  async function startP2Mutation(kind: "member" | "signup", action: string, payload: Record<string, any>) {
+    if (p2Busy || p2Pending || p2Refreshing || !sessionToken || !membersFresh || (kind === "signup" && !practiceFresh)) return;
+    p2Pending = { kind, action, payload: structuredClone(payload), requestId: createRequestId(), draft: captureP2Draft() };
+    await runP2Mutation();
+  }
+
+  async function runP2Mutation() {
+    if (!client || !sessionToken || !p2Pending || p2Busy) return;
+    const pending = p2Pending;
+    const token = sessionToken;
+    const status = pending.kind === "member" ? memberEditStatus : managedSignupStatus;
+    const draft = pending.draft;
+    p2Busy = true;
+    updateP2Controls();
+    setStatus(status, pending.accepted ? "正在重新读取已保存结果，不会再次写入……" : "正在提交并等待服务器确认，请勿重复操作……", "pending");
+    try {
+      if (!pending.accepted) {
+        const response = await client.post(pending.action, { ...pending.payload, session_token: token }, { requestId: pending.requestId });
+        if (token !== sessionToken || p2Pending !== pending) return;
+        pending.result = response.data;
+        pending.accepted = true;
+      }
+      setStatus(status, "服务器已确认保存，正在重新读取名册与报名……", "pending");
+      await loadManagedMembers(pending.kind === "signup" ? draft : { memberId: pending.payload.member_id });
+      await loadManagedPractice(pending.kind === "signup" ? { signupMemberId: pending.payload.member_id } : draft);
+      if (token !== sessionToken || p2Pending !== pending) return;
+      p2Pending = null;
+      if (pending.kind === "member") {
+        const latest = managedMembers.find((member) => member.member_id === pending.payload.member_id);
+        setStatus(status, pending.action === "restoreMemberName" ? `恢复姓名操作已保存。当前显示姓名：${latest?.display_name || "未找到成员"}，报名关联保持不变。` : pending.action === "setMemberStatus" ? `状态操作已保存。当前状态：${latest?.status === "ACTIVE" ? "有效" : "已停用"}，名单版本已更新。` : "队员资料已保存，下方名册与报名显示重新读取后的当前状态。", "ready");
+      } else {
+        const result = pending.result;
+        const promotedNames = (result.promoted_member_ids || []).map((id: string) => managedMembers.find((member) => member.member_id === id)?.display_name || id);
+        const latest = managedPractice?.signups?.find((signup: any) => signup.member_id === pending.payload.member_id);
+        setStatus(status, `操作已保存。当前状态：${signupResultText(latest || { status: "CANCELLED" })}${promotedNames.length ? ` 本次操作曾触发递补：${promotedNames.join("、")}；当前状态以清单为准。` : " 本次没有其他队员递补。"} 清单已从服务器重新读取。`, "ready");
+      }
+    } catch (error) {
+      if (token !== sessionToken || p2Pending !== pending) return;
+      if (protectedError(error)) return;
+      if (pending.accepted) {
+        setStatus(status, `服务器已确认保存成功，但最新清单读取失败。请点击「重新读取已保存结果」，不会再次写入。${messageForError(error)}`, "error");
+        return;
+      }
+      const uncertain = !(error instanceof DragonBoatApiError) || error.retryable || ["INVALID_RESPONSE", "CONTRACT_MISMATCH"].includes(error.code);
+      if (uncertain) {
+        setStatus(status, `${messageForError(error)} 操作结果尚未确认，原内容和请求编号已锁定。请点击下方重试按钮，不要刷新或重新提交。`, "error");
+      } else {
+        p2Pending = null;
+        try {
+          await loadManagedMembers(draft);
+          await loadManagedPractice(draft);
+          if (!sessionToken) return;
+          setStatus(status, `${messageForError(error)} 已刷新服务器状态并保留输入，请核对后重新确认。`, "error");
+        } catch (refreshError) {
+          if (!protectedError(refreshError)) setStatus(status, `${messageForError(error)} 刷新未完成，当前信息可能已过期，请先刷新。`, "error");
+        }
+      }
+      return;
+    } finally {
+      if (token === sessionToken) {
+        p2Busy = false;
+        updateP2Controls();
+      }
     }
   }
 
@@ -505,6 +1046,133 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     }
   }
 
+  memberSearch?.addEventListener("input", () => {
+    renderMemberPicker(memberPicker?.value);
+    renderMemberDetail();
+    setStatus(memberEditStatus, "");
+  });
+  memberPicker?.addEventListener("change", () => {
+    renderMemberDetail();
+    setStatus(memberEditStatus, "");
+  });
+  memberEditForm?.addEventListener("input", renderMemberPreview);
+  memberStatusConfirm?.addEventListener("change", updateP2Controls);
+  memberEditForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const member = currentMember();
+    if (!member || !p2SeasonId) return;
+    startP2Mutation("member", "updateMember", {
+      season_id: p2SeasonId,
+      member_id: member.member_id,
+      member_version: member.member_version,
+      ...memberInputValues()
+    });
+  });
+  memberRestore?.addEventListener("click", () => {
+    const member = currentMember();
+    if (!member?.display_name_override || !p2SeasonId) return;
+    startP2Mutation("member", "restoreMemberName", {
+      season_id: p2SeasonId,
+      member_id: member.member_id,
+      member_version: member.member_version
+    });
+  });
+  memberStatusButton?.addEventListener("click", () => {
+    const member = currentMember();
+    if (!member || !p2SeasonId || !memberStatusConfirm?.checked || (member.status === "ACTIVE" && member.active_links?.length)) return;
+    startP2Mutation("member", "setMemberStatus", {
+      season_id: p2SeasonId,
+      member_id: member.member_id,
+      member_version: member.member_version,
+      status: member.status === "ACTIVE" ? "INACTIVE" : "ACTIVE"
+    });
+  });
+  memberRetry?.addEventListener("click", runP2Mutation);
+  managedSignupRetry?.addEventListener("click", runP2Mutation);
+  memberRefresh?.addEventListener("click", async () => {
+    if (p2Busy || p2Pending || p2Refreshing) return;
+    const draft = captureP2Draft();
+    const token = sessionToken;
+    p2Refreshing = true;
+    updateP2Controls();
+    setStatus(memberConsoleStatus, "正在刷新名册与报名……", "pending");
+    try {
+      await loadManagedMembers(draft);
+      if (token !== sessionToken) return;
+      await loadManagedPractice(draft);
+      if (token === sessionToken) setStatus(memberConsoleStatus, "已刷新服务器状态，未提交输入保留，请核对后再保存。", "ready");
+    } catch (error) {
+      if (token !== sessionToken) return;
+      if (!protectedError(error)) setStatus(memberConsoleStatus, `刷新失败，当前信息可能已过期。${messageForError(error)}`, "error");
+    } finally {
+      if (token === sessionToken) {
+        p2Refreshing = false;
+        updateP2Controls();
+      }
+    }
+  });
+  async function refreshSelectedPractice(preserveInput: boolean) {
+    if (p2Busy || p2Pending || p2Refreshing) return;
+    const draft = preserveInput ? captureP2Draft() : null;
+    const token = sessionToken;
+    p2Refreshing = true;
+    updateP2Controls();
+    if (!preserveInput) {
+      managedPractice = null;
+      if (managedPracticeDetail) managedPracticeDetail.hidden = true;
+      if (managedSignupSearch) managedSignupSearch.value = "";
+      if (managedSignupMember) managedSignupMember.value = "";
+      setStatus(managedSignupStatus, "");
+    }
+    try {
+      await loadManagedPractice(draft);
+    } catch (error) {
+      if (token !== sessionToken) return;
+      if (!protectedError(error)) setStatus(managedPracticeStatus, `读取失败，当前信息可能已过期。${messageForError(error)}`, "error");
+    } finally {
+      if (token === sessionToken) {
+        p2Refreshing = false;
+        updateP2Controls();
+      }
+    }
+  }
+  managedPracticePicker?.addEventListener("change", () => refreshSelectedPractice(false));
+  managedPracticeRefresh?.addEventListener("click", () => refreshSelectedPractice(true));
+  managedSignupSearch?.addEventListener("input", () => {
+    renderManagedSignupMemberPicker(managedSignupMember?.value);
+    renderManagedSignupSelection();
+  });
+  managedSignupMember?.addEventListener("change", () => {
+    renderManagedSignupSelection();
+    setStatus(managedSignupStatus, "");
+  });
+  managedSignupCancelConfirm?.addEventListener("change", updateP2Controls);
+  function managedSignupPayload() {
+    if (!managedPractice || !p2SeasonId || !managedSignupMember?.value || !managedPractice.management_signup_open) return null;
+    return {
+      season_id: p2SeasonId,
+      practice_id: managedPractice.practice.practice_id,
+      member_id: managedSignupMember.value,
+      practice_version: managedPractice.practice.practice_version,
+      signup_version: managedPractice.signup_version
+    };
+  }
+  managedSignupForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const payload = managedSignupPayload();
+    if (!payload) return;
+    const member = managedMembers.find((item) => item.member_id === payload.member_id);
+    if (member?.status !== "ACTIVE") return;
+    const signup = currentManagedSignup();
+    const preference = (managedSignupForm.elements.namedItem("preference") as HTMLSelectElement).value;
+    startP2Mutation("signup", signup && signup.status !== "CANCELLED" ? "updateSignupByCoach" : "signupByCoach", { ...payload, preference });
+  });
+  managedSignupCancel?.addEventListener("click", () => {
+    const payload = managedSignupPayload();
+    if (!payload || !managedSignupCancelConfirm?.checked || currentManagedSignup()?.status === "CANCELLED") return;
+    startP2Mutation("signup", "cancelSignupByCoach", payload);
+  });
+
   loginForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!client || !codeInput) return;
@@ -544,6 +1212,24 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   refreshButton?.addEventListener("click", () => refreshBootstrap(seasonPicker?.value).catch((error) => {
     if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
   }));
+  managementRetry?.addEventListener("click", async () => {
+    const entry = [...pendingRequests.entries()][0];
+    if (!entry || managementWriting || !sessionToken) return;
+    setStatus(managementStatus, "正在按上次提交的原内容确认结果，当前修改不会发送……", "pending");
+    try {
+      const [key, request] = entry;
+      const response = await managedPost(request.action, request.payload, key);
+      if (request.action === "createSeason") {
+        createSeasonForm?.reset();
+        if (createSeasonDetails) createSeasonDetails.open = false;
+      }
+      if (request.action === "createPractice") additionalForm?.reset();
+      await refreshBootstrap(response.data.season?.season_id || String(request.payload.season_id || ""));
+      setStatus(managementStatus, "原操作已由服务器确认成功，已重新读取赛季。请核对结果后再进行新的修改。", "ready");
+    } catch (error) {
+      if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
+    }
+  });
   seasonPicker?.addEventListener("change", () => loadSeason(seasonPicker.value));
 
   createSeasonForm?.addEventListener("submit", async (event) => {

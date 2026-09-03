@@ -108,11 +108,15 @@ function parseJsonObject_(value) {
 }
 
 function getSeasonSpreadsheet_(season) {
+  var cacheKey = "spreadsheet:" + season.runtime_spreadsheet_id;
+  if (dragonBoatStoreHandles_ && dragonBoatStoreHandles_[cacheKey]) return dragonBoatStoreHandles_[cacheKey];
   if (!season.runtime_spreadsheet_id) {
     throw dragonBoatRequestError_("SEASON_NOT_INITIALIZED", "The season data store is not initialized.");
   }
   try {
-    return SpreadsheetApp.openById(String(season.runtime_spreadsheet_id));
+    var spreadsheet = SpreadsheetApp.openById(String(season.runtime_spreadsheet_id));
+    if (dragonBoatStoreHandles_) dragonBoatStoreHandles_[cacheKey] = spreadsheet;
+    return spreadsheet;
   } catch (error) {
     throw dragonBoatRequestError_("CONFIGURATION_ERROR", "The season data store cannot be opened.");
   }
@@ -127,6 +131,8 @@ function ensureSeasonRuntimeSheets_(spreadsheet) {
 }
 
 function getSeasonSheet_(season, sheetName) {
+  var cacheKey = "season_sheet:" + season.runtime_spreadsheet_id + ":" + sheetName;
+  if (dragonBoatStoreHandles_ && dragonBoatStoreHandles_[cacheKey]) return dragonBoatStoreHandles_[cacheKey];
   var headers = DRAGON_BOAT_RUNTIME_SHEET_HEADERS_[sheetName];
   if (!headers) throw new Error("Unknown season sheet: " + sheetName);
   var sheet = getSeasonSpreadsheet_(season).getSheetByName(sheetName);
@@ -134,6 +140,7 @@ function getSeasonSheet_(season, sheetName) {
     throw dragonBoatRequestError_("SEASON_NOT_INITIALIZED", "The season data store is not initialized.");
   }
   ensureSheetHeader_(sheet, headers);
+  if (dragonBoatStoreHandles_) dragonBoatStoreHandles_[cacheKey] = sheet;
   return sheet;
 }
 

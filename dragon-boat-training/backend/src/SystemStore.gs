@@ -1,9 +1,12 @@
 function getSystemSpreadsheet_() {
+  if (dragonBoatStoreHandles_ && dragonBoatStoreHandles_.system) return dragonBoatStoreHandles_.system;
   var spreadsheetId = getRequiredScriptProperty_(
     DRAGON_BOAT_PROPERTY_KEYS_.SYSTEM_SPREADSHEET_ID
   );
   try {
-    return SpreadsheetApp.openById(spreadsheetId);
+    var spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    if (dragonBoatStoreHandles_) dragonBoatStoreHandles_.system = spreadsheet;
+    return spreadsheet;
   } catch (error) {
     throw dragonBoatRequestError_(
       "CONFIGURATION_ERROR",
@@ -42,6 +45,8 @@ function ensureSheetHeader_(sheet, expectedHeaders) {
 }
 
 function getSystemSheet_(sheetName) {
+  var cacheKey = "system_sheet:" + sheetName;
+  if (dragonBoatStoreHandles_ && dragonBoatStoreHandles_[cacheKey]) return dragonBoatStoreHandles_[cacheKey];
   var headers = DRAGON_BOAT_SHEET_HEADERS_[sheetName];
   if (!headers) {
     throw new Error("Unknown system sheet: " + sheetName);
@@ -54,6 +59,7 @@ function getSystemSheet_(sheetName) {
     );
   }
   ensureSheetHeader_(sheet, headers);
+  if (dragonBoatStoreHandles_) dragonBoatStoreHandles_[cacheKey] = sheet;
   return sheet;
 }
 

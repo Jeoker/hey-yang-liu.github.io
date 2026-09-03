@@ -41,7 +41,7 @@ test("malformed JSON and unknown actions return safe structured errors", async (
   );
   assert.equal("stack" in malformed.error, false);
 
-  const unsupported = post(context, { action: "signup", request_id: "request_789" });
+  const unsupported = post(context, { action: "notAnAction", request_id: "request_789" });
   assert.equal(unsupported.ok, false);
   assert.equal(unsupported.error.code, "UNSUPPORTED_ACTION");
 });

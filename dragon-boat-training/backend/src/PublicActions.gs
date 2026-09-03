@@ -10,9 +10,15 @@ function publicBootstrap_(request) {
     throw dragonBoatRequestError_("SEASON_NOT_PUBLIC", "The requested season is not public.");
   }
   var published = [];
+  var weekRecords = season.runtime_spreadsheet_id ? getSeasonSheetRecords_(season, "TrainingWeeks") : [];
+  var publicWeeks = {};
+  weekRecords.forEach(function (week) {
+    if (week.status === "OPENED" && week.published_at && Date.parse(String(week.published_at)) <= Date.now()) publicWeeks[week.week_id] = true;
+  });
   if (season.runtime_spreadsheet_id) {
     published = getSeasonSheetRecords_(season, "Practices").filter(function (practice) {
-      return Boolean(practice.schedule_published_at) && !practice.cancelled_at;
+      return publicWeeks[practice.week_id] && Boolean(practice.schedule_published_at) &&
+        Date.parse(String(practice.schedule_published_at)) <= Date.now();
     }).map(practiceProjection_).sort(function (left, right) {
       return left.start_at.localeCompare(right.start_at);
     });
@@ -22,7 +28,6 @@ function publicBootstrap_(request) {
     if (!byWeek[practice.week_id]) byWeek[practice.week_id] = [];
     byWeek[practice.week_id].push(practice);
   });
-  var weekRecords = season.runtime_spreadsheet_id ? getSeasonSheetRecords_(season, "TrainingWeeks") : [];
   var weeks = Object.keys(byWeek).map(function (weekId) {
     var week = null;
     weekRecords.some(function (candidate) {
@@ -41,7 +46,7 @@ function publicBootstrap_(request) {
     return left.week_start_date.localeCompare(right.week_start_date);
   });
   var upcomingCount = published.filter(function (practice) {
-    return Date.parse(practice.end_at) > Date.now();
+    return !practice.cancelled && Date.parse(practice.end_at) > Date.now();
   }).length;
   return {
     state: effectiveStatus === "OPEN" ? (upcomingCount ? "ACTIVE" : "REST") : effectiveStatus,
@@ -51,40 +56,44 @@ function publicBootstrap_(request) {
 }
 
 function publicMembers_(request) {
-  var seasonId = requireRequestString_(request, "season_id", 8, 128);
-  var season = requireSeason_(seasonId);
-  ensureSeasonOpen_(season);
+  return withDragonBoatScriptLock_(function () {
+    var season = requireSeason_(requireRequestString_(request, "season_id", 8, 128));
+    ensureSeasonOpen_(season);
+    return getPublicRosterSnapshot_(season, false);
+  });
+}
+
+// Caller holds the script lock. One snapshot also supplies names for inactive
+// members on an ended practice without exposing them in the selectable roster.
+function getPublicRosterSnapshot_(season, includeInactive) {
   var cacheKey = [
-    "public_members",
+    "public_members_p2",
     season.season_id,
     Number(season.binding_version || 0),
     Number(season.roster_version || 0)
   ].join("_");
   var cache = CacheService.getScriptCache();
   var cached = cache.get(cacheKey);
+  var result = null;
   if (cached) {
-    try { return JSON.parse(cached); } catch (error) {}
+    try {
+      var parsed = JSON.parse(cached);
+      if (Date.parse(parsed.expires_at) > Date.now()) result = parsed;
+    } catch (error) {}
   }
-  return withDragonBoatScriptLock_(function () {
-    var secondRead = cache.get(cacheKey);
-    if (secondRead) {
-      try { return JSON.parse(secondRead); } catch (error) {}
-    }
-    season = requireSeason_(seasonId);
-    ensureSeasonOpen_(season);
+  if (!result) {
     var generatedAt = new Date();
-    var members = getSeasonSheetRecords_(season, "Members").filter(function (member) {
-      return String(member.status) === "ACTIVE";
-    }).map(function (member) {
+    var members = getSeasonSheetRecords_(season, "Members").map(function (member) {
       return {
         member_id: String(member.member_id),
         display_name: String(member.display_name_override || member.source_display_name),
-        default_preference: String(member.default_preference || "AMBIENT")
+        default_preference: String(member.default_preference || "AMBIENT"),
+        active: member.status === "ACTIVE"
       };
     }).sort(function (left, right) {
       return left.display_name.localeCompare(right.display_name);
     });
-    var result = {
+    result = {
       season_id: String(season.season_id),
       binding_version: Number(season.binding_version || 0),
       roster_version: Number(season.roster_version || 0),
@@ -92,9 +101,16 @@ function publicMembers_(request) {
       expires_at: new Date(generatedAt.getTime() + DRAGON_BOAT_PUBLIC_ROSTER_CACHE_SECONDS_ * 1000).toISOString(),
       members: members
     };
-    cache.put(cacheKey, JSON.stringify(result), DRAGON_BOAT_PUBLIC_ROSTER_CACHE_SECONDS_);
-    return result;
-  });
+    // Oversized snapshots remain correct without caching; never truncate names.
+    if (JSON.stringify(result).length < 25000) {
+      try { cache.put(cacheKey, JSON.stringify(result), DRAGON_BOAT_PUBLIC_ROSTER_CACHE_SECONDS_); } catch (error) {}
+    }
+  }
+  return Object.assign({}, result, { members: result.members.filter(function (member) {
+    return includeInactive || member.active;
+  }).map(function (member) {
+    return { member_id: member.member_id, display_name: member.display_name, default_preference: member.default_preference };
+  }) });
 }
 
 function getSeasonManagement_(request) {

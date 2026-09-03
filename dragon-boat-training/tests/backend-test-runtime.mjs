@@ -266,6 +266,7 @@ export async function createBackend(options = {}) {
       }
     },
     SpreadsheetApp: {
+      flush() {},
       openById(id) {
         const match = spreadsheets.get(id);
         if (!match) throw new Error("Spreadsheet not found");

@@ -128,7 +128,12 @@ function getSessionTtlSeconds_() {
   return Math.floor(seconds);
 }
 
+var dragonBoatLockDepth_ = 0;
+var dragonBoatStoreHandles_ = null;
+
 function withDragonBoatScriptLock_(callback) {
+  // Nested service helpers share the lock in this execution, never across requests.
+  if (dragonBoatLockDepth_ > 0) return callback();
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(DRAGON_BOAT_SCRIPT_LOCK_TIMEOUT_MS_);
@@ -141,9 +146,19 @@ function withDragonBoatScriptLock_(callback) {
   }
 
   try {
+    dragonBoatLockDepth_ += 1;
+    dragonBoatStoreHandles_ = {};
+    recoverP2Requests_();
     return callback();
   } finally {
-    lock.releaseLock();
+    try {
+      // Commit buffered Sheets writes while this execution still owns the lock.
+      SpreadsheetApp.flush();
+    } finally {
+      dragonBoatLockDepth_ -= 1;
+      dragonBoatStoreHandles_ = null;
+      lock.releaseLock();
+    }
   }
 }
 

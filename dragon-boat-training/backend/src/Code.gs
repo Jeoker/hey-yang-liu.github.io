@@ -13,7 +13,7 @@ function handleDragonBoatRequest_(method, event) {
     var request = parseDragonBoatRequest_(method, event);
     requestId = request.request_id;
 
-    if (method === "GET" && ["health", "bootstrap", "members"].indexOf(request.action) < 0) {
+    if (method === "GET" && ["health", "bootstrap", "members", "practice"].indexOf(request.action) < 0) {
       throw dragonBoatRequestError_(
         "METHOD_NOT_ALLOWED",
         "This action must be sent as a POST request."
@@ -24,9 +24,24 @@ function handleDragonBoatRequest_(method, event) {
       case "health":
         return dragonBoatSuccess_(dragonBoatHealth_(), requestId);
       case "bootstrap":
-        return dragonBoatSuccess_(publicBootstrap_(request), requestId);
+        return dragonBoatSuccess_(withDragonBoatScriptLock_(function () { return publicBootstrap_(request); }), requestId);
       case "members":
         return dragonBoatSuccess_(publicMembers_(request), requestId);
+      case "practice":
+        return dragonBoatSuccess_(publicPractice_(request), requestId);
+      case "signup":
+      case "signupByCoach":
+      case "updateSignup":
+      case "updateSignupByCoach":
+      case "cancelSignup":
+      case "cancelSignupByCoach":
+        return dragonBoatSuccess_(mutateSignup_(request), requestId);
+      case "listSeasonMembers":
+        return dragonBoatSuccess_(listSeasonMembers_(request), requestId);
+      case "updateMember":
+      case "restoreMemberName":
+      case "setMemberStatus":
+        return dragonBoatSuccess_(mutateMember_(request), requestId);
       case "coachLogin":
         return dragonBoatSuccess_(coachLogin_(request), requestId);
       case "coachLogout":
@@ -36,7 +51,7 @@ function handleDragonBoatRequest_(method, event) {
       case "coachConnectivityWrite":
         return dragonBoatSuccess_(coachConnectivityWrite_(request), requestId);
       case "getSeasonManagement":
-        return dragonBoatSuccess_(getSeasonManagement_(request), requestId);
+        return dragonBoatSuccess_(withDragonBoatScriptLock_(function () { return getSeasonManagement_(request); }), requestId);
       case "createSeason":
         return dragonBoatSuccess_(createSeason_(request), requestId);
       case "validateSeasonBinding":

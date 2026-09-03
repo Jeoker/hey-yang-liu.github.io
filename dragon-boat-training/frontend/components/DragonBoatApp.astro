@@ -1,6 +1,7 @@
 ---
 import logoUrl from "../../assets/team-logo-placeholder.svg";
 import "../styles/app.css";
+import "../styles/signup.css";
 
 const basePath = import.meta.env.BASE_URL.endsWith("/")
   ? import.meta.env.BASE_URL
@@ -63,22 +64,72 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       <div class="dragon-boat-section-heading">
         <div>
           <p class="dragon-boat-session-label">公开计划</p>
-          <h2 id="published-training-title">已开放训练</h2>
+          <h2 id="published-training-title">已发布训练</h2>
         </div>
       </div>
       <div data-week-cards></div>
       <p class="dragon-boat-empty-state" data-week-empty hidden></p>
     </section>
 
-    <p class="dragon-boat-note">
-      队员无需登录。训练报名和候补功能将在下一阶段接入；当前页面只展示管理员已经正式开放的场次。
-    </p>
+    <section class="dragon-boat-signup-panel" data-practice-panel hidden aria-labelledby="practice-detail-title">
+      <div class="dragon-boat-section-heading">
+        <div>
+          <p class="dragon-boat-session-label">单次训练报名</p>
+          <h2 id="practice-detail-title" data-practice-title tabindex="-1">正在读取训练</h2>
+        </div>
+        <button class="dragon-boat-secondary-button" type="button" data-refresh-practice>刷新本次训练</button>
+      </div>
+      <p class="dragon-boat-signup-meta" data-practice-meta></p>
+      <p class="dragon-boat-signup-meta" data-practice-cutoff></p>
+      <p class="dragon-boat-signup-counts" data-practice-counts></p>
+      <p class="dragon-boat-signup-warning" data-practice-closed hidden></p>
+      <div data-signup-list></div>
+
+      <form class="dragon-boat-signup-form" data-signup-form hidden>
+        <h3>选择自己的姓名</h3>
+        <p class="dragon-boat-note">无需登录。请确认选择的是自己，误改可以联系 Coach 修正。找不到姓名时，请先填写本季入队表单，稍后刷新训练。</p>
+        <div class="dragon-boat-signup-fields">
+          <label class="dragon-boat-signup-member-field">
+            搜索本季姓名
+            <input type="search" data-member-search autocomplete="off" placeholder="输入姓名" aria-controls="signup-member" />
+            <select id="signup-member" data-member-select size="5" aria-label="选择本季队员" required></select>
+          </label>
+          <label>
+            本次训练侧向
+            <select data-signup-preference>
+              <option value="LEFT">Left · 左侧</option>
+              <option value="AMBIENT">Ambient · 左右均可</option>
+              <option value="RIGHT">Right · 右侧</option>
+            </select>
+          </label>
+          <p class="dragon-boat-note" data-selected-signup>请先选择自己的姓名。</p>
+        </div>
+        <p class="dragon-boat-signup-warning" data-change-warning hidden>直接修改偏好会保留本次报名时间。原侧名额可能被候补递补，换回原侧不保证有位；不会挤掉其他已确认队员。</p>
+        <div class="dragon-boat-button-row">
+          <button class="dragon-boat-primary-button" type="submit" data-submit-signup>报名本次训练</button>
+          <button class="dragon-boat-secondary-button" type="button" data-cancel-signup hidden>取消我的报名</button>
+        </div>
+      </form>
+
+      <div class="dragon-boat-signup-confirm" data-signup-confirm hidden>
+        <p data-confirm-text></p>
+        <div class="dragon-boat-button-row">
+          <button class="dragon-boat-primary-button" type="button" data-confirm-action>确认提交</button>
+          <button class="dragon-boat-secondary-button" type="button" data-dismiss-confirm>返回修改</button>
+        </div>
+      </div>
+      <p class="dragon-boat-signup-status" data-signup-status aria-live="polite" role="status"></p>
+      <button class="dragon-boat-secondary-button" type="button" data-retry-signup hidden>核实并重试原操作</button>
+    </section>
+
+    <p class="dragon-boat-note">普通报名、偏好修改和取消在训练开始前两小时截止，以服务器时间为准。确认名额与具体船位分别安排。</p>
   </main>
 </div>
 
 <script>
-  import { DragonBoatApiClient, DragonBoatApiError } from "../lib/api-client.js";
+  import { DragonBoatApiClient, DragonBoatApiError, createRequestId } from "../lib/api-client.js";
   import { loadRosterSnapshot, saveRosterSnapshot } from "../lib/public-roster-cache.js";
+  import { renderSignupList, signupPreferenceLabels, signupResultText } from "../lib/signup-view.js";
 
   const root = document.querySelector<HTMLElement>("[data-dragon-boat-app]");
   const loadingCard = root?.querySelector<HTMLElement>("[data-loading-card]");
@@ -99,6 +150,48 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const weekCards = root?.querySelector<HTMLElement>("[data-week-cards]");
   const weekEmpty = root?.querySelector<HTMLElement>("[data-week-empty]");
   const apiUrl = root?.getAttribute("data-api-url")?.trim() || "";
+  const practicePanel = root?.querySelector<HTMLElement>("[data-practice-panel]");
+  const practiceTitle = root?.querySelector<HTMLElement>("[data-practice-title]");
+  const practiceMeta = root?.querySelector<HTMLElement>("[data-practice-meta]");
+  const practiceCutoff = root?.querySelector<HTMLElement>("[data-practice-cutoff]");
+  const practiceCounts = root?.querySelector<HTMLElement>("[data-practice-counts]");
+  const practiceClosed = root?.querySelector<HTMLElement>("[data-practice-closed]");
+  const signupList = root?.querySelector<HTMLElement>("[data-signup-list]");
+  const signupForm = root?.querySelector<HTMLFormElement>("[data-signup-form]");
+  const memberSearch = root?.querySelector<HTMLInputElement>("[data-member-search]");
+  const memberSelect = root?.querySelector<HTMLSelectElement>("[data-member-select]");
+  const preferenceSelect = root?.querySelector<HTMLSelectElement>("[data-signup-preference]");
+  const selectedSignup = root?.querySelector<HTMLElement>("[data-selected-signup]");
+  const changeWarning = root?.querySelector<HTMLElement>("[data-change-warning]");
+  const submitSignup = root?.querySelector<HTMLButtonElement>("[data-submit-signup]");
+  const cancelSignup = root?.querySelector<HTMLButtonElement>("[data-cancel-signup]");
+  const refreshPractice = root?.querySelector<HTMLButtonElement>("[data-refresh-practice]");
+  const confirmPanel = root?.querySelector<HTMLElement>("[data-signup-confirm]");
+  const confirmText = root?.querySelector<HTMLElement>("[data-confirm-text]");
+  const confirmAction = root?.querySelector<HTMLButtonElement>("[data-confirm-action]");
+  const dismissConfirm = root?.querySelector<HTMLButtonElement>("[data-dismiss-confirm]");
+  const signupStatus = root?.querySelector<HTMLElement>("[data-signup-status]");
+  const retrySignup = root?.querySelector<HTMLButtonElement>("[data-retry-signup]");
+  const client = apiUrl ? new DragonBoatApiClient({ baseUrl: apiUrl }) : null;
+  const writeClient = apiUrl ? new DragonBoatApiClient({ baseUrl: apiUrl, timeoutMs: 30000 }) : null;
+  const initialUrl = new URL(window.location.href);
+  let season: any = null;
+  let roster: any = null;
+  let practiceData: any = null;
+  let activePracticeId = "";
+  let selectedMemberId = "";
+  let readSequence = 0;
+  let reading = false;
+  let writing = false;
+  let confirmation: any = null;
+  let pendingWrite: any = null;
+  let serverOffsetMs = 0;
+  const closedMessages: Record<string, string> = {
+    SEASON_NOT_OPEN: "本赛季已经结束，报名清单仅供查看。",
+    PRACTICE_CANCELLED: "本次训练已取消，报名清单仅供查看。",
+    PRACTICE_ENDED: "本次训练已结束，报名清单仅供查看。",
+    SIGNUP_CLOSED: "普通报名、修改和取消已截止。如有变动，请联系 Coach。"
+  };
 
   function showConnection(state: string, label: string, text: string, technical = "") {
     if (!badge || !message || !detail) return;
@@ -154,13 +247,20 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
         card.className = "dragon-boat-practice-card";
         const title = document.createElement("h4");
         title.textContent = dateTime(practice.start_at, practice.timezone);
+        const state = document.createElement("span");
+        state.className = "dragon-boat-practice-state";
+        state.textContent = practice.cancelled || practice.cancelled_at
+          ? "已取消 · 报名只读"
+          : Date.parse(practice.end_at) <= Date.now() + serverOffsetMs
+            ? "已结束 · 报名只读"
+            : data.season.status !== "OPEN" ? "赛季已结束 · 报名只读" : "已发布 · 查看最新报名状态";
         const time = document.createElement("span");
         time.textContent = `至 ${new Intl.DateTimeFormat("zh-CN", { timeZone: practice.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(practice.end_at))}`;
         const location = document.createElement("strong");
         location.textContent = practice.location;
         const address = document.createElement("p");
         address.textContent = practice.address;
-        card.append(title, time, location, address);
+        card.append(title, state, time, location, address);
         if (practice.map_url) {
           const map = document.createElement("a");
           map.href = practice.map_url;
@@ -169,6 +269,15 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
           map.textContent = "查看地图";
           card.append(map);
         }
+        const cutoff = document.createElement("p");
+        cutoff.textContent = `普通报名截止：${dateTime(practice.signup_cutoff_at, practice.timezone)}（${practice.timezone}）`;
+        const entry = document.createElement("button");
+        entry.type = "button";
+        entry.className = "dragon-boat-secondary-button";
+        entry.textContent = "查看报名与候补";
+        entry.dataset.practiceEntry = practice.practice_id;
+        entry.addEventListener("click", () => openPractice(practice.practice_id, true));
+        card.append(cutoff, entry);
         grid.append(card);
       });
       section.append(heading, grid);
@@ -176,30 +285,322 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     });
   }
 
-  async function renderRoster(client: DragonBoatApiClient, season: any) {
-    if (!rosterSummary || !rosterCount || !rosterDetail || season.status !== "OPEN") return;
-    let snapshot = loadRosterSnapshot(season);
+  async function renderRoster(client: DragonBoatApiClient, currentSeason: any) {
+    if (!rosterSummary || !rosterCount || !rosterDetail || currentSeason.status !== "OPEN") return;
+    let snapshot = null;
+    try { snapshot = loadRosterSnapshot(currentSeason); } catch { /* Storage can be unavailable in private mode. */ }
     let source = "本机缓存";
     if (!snapshot) {
-      const response = await client.get("members", { season_id: season.season_id });
+      const response = await client.get("members", { season_id: currentSeason.season_id });
       snapshot = response.data;
-      saveRosterSnapshot(snapshot);
+      if (snapshot.season_id !== currentSeason.season_id) throw new Error("ROSTER_SEASON_MISMATCH");
+      try { saveRosterSnapshot(snapshot); } catch { /* The returned snapshot remains usable without storage. */ }
       source = "共享名单快照";
     }
+    if (season?.season_id !== currentSeason.season_id) return;
+    roster = snapshot;
     rosterSummary.hidden = false;
     rosterCount.textContent = `${snapshot.members.length} 名本季有效队员`;
     rosterDetail.textContent = `${source}，有效至 ${new Date(snapshot.expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
   }
+
+  function setSignupStatus(text: string, state = "pending") {
+    if (!signupStatus) return;
+    signupStatus.textContent = text;
+    signupStatus.dataset.state = state;
+  }
+
+  function preferenceLabel(value: string) {
+    return (signupPreferenceLabels as Record<string, string>)[value] || value;
+  }
+
+  function currentSignup(memberId = selectedMemberId) {
+    return practiceData?.signups?.find((row: any) => row.member_id === memberId && row.status !== "CANCELLED") || null;
+  }
+
+  function signupIsOpen() {
+    if (!practiceData?.signup_open) return false;
+    // This local hint can only close controls. Every write still uses server validation.
+    return Date.now() + serverOffsetMs < Date.parse(practiceData.practice.signup_cutoff_at);
+  }
+
+  function updateControls() {
+    const locked = writing || reading || Boolean(pendingWrite) || Boolean(confirmation);
+    const open = signupIsOpen();
+    const selected = Boolean(selectedMemberId && roster?.members?.some((member: any) => member.member_id === selectedMemberId));
+    if (memberSearch) memberSearch.disabled = locked || !open;
+    if (memberSelect) memberSelect.disabled = locked || !open;
+    if (preferenceSelect) preferenceSelect.disabled = locked || !open || !selected;
+    if (submitSignup) submitSignup.disabled = locked || !open || !selected || (currentSignup()?.preference === preferenceSelect?.value);
+    if (cancelSignup) cancelSignup.disabled = locked || !open || !currentSignup();
+    if (refreshPractice) refreshPractice.disabled = locked;
+    if (confirmAction) confirmAction.disabled = writing || reading || Boolean(pendingWrite) || !open;
+    if (dismissConfirm) dismissConfirm.disabled = writing || Boolean(pendingWrite);
+    if (retrySignup) {
+      retrySignup.hidden = !pendingWrite;
+      retrySignup.disabled = writing || reading;
+      retrySignup.textContent = pendingWrite?.accepted ? "重新读取最终报名结果" : "核实并重试原操作";
+    }
+    root?.querySelectorAll<HTMLButtonElement>("[data-practice-entry]").forEach((button) => { button.disabled = locked; });
+    if (practiceClosed && practiceData) {
+      practiceClosed.hidden = open;
+      practiceClosed.textContent = closedMessages[practiceData.closed_reason] || closedMessages.SIGNUP_CLOSED;
+    }
+  }
+
+  function renderSelection(resetPreference = true) {
+    const member = roster?.members?.find((row: any) => row.member_id === selectedMemberId);
+    if (!member) selectedMemberId = "";
+    const signup = currentSignup();
+    if (selectedSignup) selectedSignup.textContent = member
+      ? `${member.display_name}：${signupResultText(signup)}` : "请先选择自己的姓名。";
+    if (preferenceSelect && resetPreference) preferenceSelect.value = signup?.preference || member?.default_preference || "AMBIENT";
+    if (submitSignup) submitSignup.textContent = signup ? "修改本次偏好" : "报名本次训练";
+    if (cancelSignup) cancelSignup.hidden = !signup;
+    if (changeWarning) changeWarning.hidden = !signup;
+    updateControls();
+  }
+
+  function renderMemberOptions(resetPreference = true) {
+    if (!memberSelect) return;
+    const query = memberSearch?.value.trim().toLocaleLowerCase() || "";
+    const members = (roster?.members || []).filter((member: any) => String(member.display_name).toLocaleLowerCase().includes(query));
+    memberSelect.replaceChildren();
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = members.length ? "请选择自己的姓名" : "没有匹配姓名";
+    memberSelect.append(placeholder);
+    members.forEach((member: any) => {
+      const option = document.createElement("option");
+      option.value = member.member_id;
+      const signup = currentSignup(member.member_id);
+      option.textContent = `${member.display_name}${signup ? signup.status === "WAITLISTED" ? " · 已在候补" : " · 已确认报名" : ""}`;
+      memberSelect.append(option);
+    });
+    if (!members.some((member: any) => member.member_id === selectedMemberId)) selectedMemberId = "";
+    memberSelect.value = selectedMemberId;
+    renderSelection(resetPreference);
+  }
+
+  function renderPractice() {
+    const data = practiceData;
+    if (!data) return;
+    const practice = data.practice;
+    if (practiceTitle) practiceTitle.textContent = dateTime(practice.start_at, practice.timezone);
+    if (practiceMeta) practiceMeta.textContent = `至 ${dateTime(practice.end_at, practice.timezone)} · ${practice.timezone} · ${practice.location} · ${practice.address}`;
+    if (practiceCutoff) practiceCutoff.textContent = `普通报名截止：${dateTime(practice.signup_cutoff_at, practice.timezone)}。训练情况独立刷新，不等待名单缓存到期。`;
+    if (practiceCounts) practiceCounts.textContent = `已确认 ${data.counts.confirmed} / ${data.counts.total_capacity} · 候补 ${data.counts.waitlisted} · Left ${data.counts.left} / Ambient ${data.counts.ambient} / Right ${data.counts.right}`;
+    renderSignupList(signupList, data.signups);
+    if (signupForm) signupForm.hidden = !roster || season?.status !== "OPEN";
+    renderMemberOptions();
+  }
+
+  async function readPractice() {
+    if (!client || !season || !activePracticeId) return false;
+    const sequence = ++readSequence;
+    const seasonId = season.season_id;
+    const practiceId = activePracticeId;
+    reading = true;
+    updateControls();
+    try {
+      const response = await client.get("practice", { season_id: seasonId, practice_id: practiceId });
+      if (sequence !== readSequence || seasonId !== season?.season_id || practiceId !== activePracticeId) return false;
+      if (response.data.season_id !== seasonId || response.data.practice.practice_id !== practiceId) throw new Error("PRACTICE_ID_MISMATCH");
+      practiceData = response.data;
+      const serverTime = Date.parse(response.meta.server_time);
+      if (Number.isFinite(serverTime)) serverOffsetMs = serverTime - Date.now();
+      season = { ...season, roster_version: practiceData.roster_version, binding_version: practiceData.binding_version };
+      // Only the season member snapshot is cached; this response is always read afresh.
+      if (season.status === "OPEN") {
+        try { await renderRoster(client, season); }
+        catch {
+          roster = null;
+          if (rosterDetail) rosterDetail.textContent = "本季姓名暂时读取失败，刷新训练后可重试。";
+        }
+      }
+      if (sequence !== readSequence || practiceId !== activePracticeId) return false;
+      renderPractice();
+      return true;
+    } finally {
+      if (sequence === readSequence) {
+        reading = false;
+        updateControls();
+      }
+    }
+  }
+
+  async function openPractice(practiceId: string, updateUrl = false) {
+    if (writing || pendingWrite || confirmation) return;
+    activePracticeId = practiceId;
+    practiceData = null;
+    selectedMemberId = "";
+    if (memberSearch) memberSearch.value = "";
+    if (practicePanel) practicePanel.hidden = false;
+    if (signupForm) signupForm.hidden = true;
+    signupList?.replaceChildren();
+    if (practiceTitle) practiceTitle.textContent = "正在读取训练";
+    if (practiceMeta) practiceMeta.textContent = "";
+    if (practiceCutoff) practiceCutoff.textContent = "";
+    if (practiceCounts) practiceCounts.textContent = "";
+    if (practiceClosed) practiceClosed.hidden = true;
+    setSignupStatus("正在读取最新报名情况……");
+    if (updateUrl) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("season_id", season.season_id);
+      url.searchParams.set("practice_id", practiceId);
+      window.history.replaceState(null, "", url);
+    }
+    try {
+      if (await readPractice()) {
+        setSignupStatus(roster || season.status !== "OPEN" ? "已读取最新报名情况。" : "姓名暂时读取失败，请刷新后重试。", roster || season.status !== "OPEN" ? "ready" : "error");
+        if (updateUrl) { practicePanel?.scrollIntoView({ behavior: "smooth", block: "start" }); practiceTitle?.focus({ preventScroll: true }); }
+      }
+    } catch (error) {
+      if (practiceId !== activePracticeId) return;
+      const code = error instanceof DragonBoatApiError ? error.code : "UNKNOWN_ERROR";
+      if (practiceTitle) practiceTitle.textContent = "无法读取这次训练";
+      setSignupStatus(`该训练可能尚未公开、链接不属于本赛季，或服务暂时不可用。请刷新重试。（${code}）`, "error");
+    }
+  }
+
+  function prepareAction(action: string) {
+    if (writing || reading || pendingWrite || confirmation || !signupIsOpen() || !selectedMemberId) return;
+    const member = roster?.members?.find((row: any) => row.member_id === selectedMemberId);
+    if (!member || !preferenceSelect || !practiceData) return;
+    confirmation = {
+      action,
+      displayName: member.display_name,
+      payload: {
+        season_id: season.season_id, practice_id: activePracticeId, member_id: selectedMemberId,
+        practice_version: practiceData.practice.practice_version, signup_version: practiceData.signup_version,
+        ...(action === "cancelSignup" ? {} : { preference: preferenceSelect.value })
+      }
+    };
+    if (confirmPanel) confirmPanel.hidden = false;
+    if (confirmText) confirmText.textContent = action === "cancelSignup"
+      ? `确认取消 ${member.display_name} 的本次报名？释放的名额将自动递补。以后重新报名会使用新的排队时间。`
+      : action === "updateSignup"
+        ? `确认将 ${member.display_name} 的本次偏好改为 ${preferenceLabel(preferenceSelect.value)}？保留原报名时间，但原侧名额可能被递补；若新侧没有可用名额，会进入候补，换回原侧也不保证有位。`
+        : `确认以 ${member.display_name} 报名 ${preferenceLabel(preferenceSelect.value)}？若没有可用名额，将按报名时间进入候补。曾取消后重新报名会重新排队。`;
+    setSignupStatus("请确认姓名与本次操作，尚未提交。", "pending");
+    updateControls();
+    confirmAction?.focus();
+  }
+
+  async function completeWriteReadback() {
+    if (!pendingWrite?.accepted) return;
+    const operation = pendingWrite;
+    if (!(await readPractice())) return;
+    const actualSignup = currentSignup(operation.payload.member_id);
+    const promoted = operation.result?.promoted_member_ids || [];
+    const promotedNames = promoted.map((id: string) => practiceData.signups.find((row: any) => row.member_id === id)?.display_name).filter(Boolean);
+    const latest = actualSignup ? signupResultText(actualSignup) : "当前没有有效报名；重新报名将使用新的排队时间。";
+    const promotionText = promotedNames.length ? ` 本次操作曾触发自动递补：${promotedNames.join("、")}。清单已显示当前最新状态。` : "";
+    pendingWrite = null;
+    setSignupStatus(`${operation.displayName}：${latest}${promotionText}`, "ready");
+    updateControls();
+  }
+
+  async function sendPendingWrite() {
+    if (!writeClient || !pendingWrite || writing) return;
+    writing = true;
+    updateControls();
+    const operation = pendingWrite;
+    setSignupStatus(operation.accepted ? "提交已确认，正在重新读取实际报名结果……" : "正在保存并核实报名结果，请勿重复操作或关闭页面……");
+    try {
+      if (!operation.accepted) {
+        const response = await writeClient.post(operation.action, operation.payload, { requestId: operation.requestId });
+        operation.accepted = true;
+        operation.result = response.data;
+      }
+      await completeWriteReadback();
+    } catch (error) {
+      const code = error instanceof DragonBoatApiError ? error.code : "UNKNOWN_ERROR";
+      const uncertain = operation.accepted || !(error instanceof DragonBoatApiError)
+        || error.retryable || ["INVALID_RESPONSE", "CONTRACT_MISMATCH"].includes(code);
+      if (uncertain) {
+        setSignupStatus(operation.accepted
+          ? "服务器已接受操作，但最新名单暂时读取失败。请重新读取结果，暂不提交其他操作。"
+          : "暂时无法确认操作是否完成。请使用下方按钮核实并重试原操作；姓名、偏好和请求编号保持不变。", "error");
+      } else {
+        pendingWrite = null;
+        const explanations: Record<string, string> = {
+          VERSION_CONFLICT: "报名或训练已经发生变化。请先核对刷新后的情况，再重新选择并确认操作。",
+          SIGNUP_CLOSED: closedMessages.SIGNUP_CLOSED,
+          SEASON_NOT_OPEN: closedMessages.SEASON_NOT_OPEN,
+          PRACTICE_CANCELLED: closedMessages.PRACTICE_CANCELLED,
+          PRACTICE_ENDED: closedMessages.PRACTICE_ENDED,
+          MEMBER_INACTIVE: "该队员目前已停用，请联系 Coach。",
+          MEMBER_NOT_FOUND: "本季名单中找不到该队员，请刷新后重新选择。",
+          SIGNUP_EXISTS: "该队员已经报名，请核对最新状态后使用修改偏好。",
+          SIGNUP_NOT_ACTIVE: "没有有效报名可供修改，请核对最新状态。",
+          SEAT_PLAN_REQUIRES_P3: "这次训练已有座位安排，当前阶段暂不能修改报名，请联系 Coach。"
+        };
+        let suffix = "";
+        try { await readPractice(); } catch { practiceData = null; suffix = " 最新情况尚未读取，请先刷新训练。"; }
+        setSignupStatus(`${explanations[code] || "操作未完成，请核对报名情况后重试。"}${suffix}（${code}）`, "error");
+      }
+    } finally {
+      writing = false;
+      updateControls();
+    }
+  }
+
+  memberSearch?.addEventListener("input", () => renderMemberOptions());
+  memberSelect?.addEventListener("change", () => { selectedMemberId = memberSelect.value; renderSelection(); });
+  preferenceSelect?.addEventListener("change", updateControls);
+  signupForm?.addEventListener("submit", (event) => { event.preventDefault(); prepareAction(currentSignup() ? "updateSignup" : "signup"); });
+  cancelSignup?.addEventListener("click", () => prepareAction("cancelSignup"));
+  dismissConfirm?.addEventListener("click", () => {
+    if (pendingWrite || writing) return;
+    confirmation = null;
+    if (confirmPanel) confirmPanel.hidden = true;
+    setSignupStatus("尚未提交，可以继续修改。");
+    updateControls();
+  });
+  confirmAction?.addEventListener("click", () => {
+    if (!confirmation || pendingWrite || writing || !signupIsOpen()) return;
+    pendingWrite = { ...confirmation, requestId: createRequestId(), accepted: false };
+    confirmation = null;
+    if (confirmPanel) confirmPanel.hidden = true;
+    sendPendingWrite();
+  });
+  retrySignup?.addEventListener("click", sendPendingWrite);
+  async function refreshActivePractice() {
+    if (writing || reading || pendingWrite || confirmation || !activePracticeId) return;
+    setSignupStatus("正在刷新训练报名情况……");
+    try {
+      if (await readPractice()) setSignupStatus(roster || season.status !== "OPEN" ? "已读取最新报名情况，请核对后操作。" : "姓名暂时读取失败，请刷新后重试。", roster || season.status !== "OPEN" ? "ready" : "error");
+    } catch {
+      practiceData = null;
+      updateControls();
+      setSignupStatus("最新训练状态暂时读取失败。为避免误操作，请先刷新成功再报名或修改。", "error");
+    }
+  }
+  refreshPractice?.addEventListener("click", refreshActivePractice);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshActivePractice(); });
+  window.addEventListener("beforeunload", (event) => { if (pendingWrite) event.preventDefault(); });
+  window.setInterval(updateControls, 15000);
 
   async function loadPage() {
     if (!apiUrl) {
       showConnection("error", "尚未配置", "训练服务地址尚未配置。", "PUBLIC_DRAGON_BOAT_API_URL");
       return;
     }
-    const client = new DragonBoatApiClient({ baseUrl: apiUrl });
+    if (!client) return;
     try {
-      const response = await client.get("bootstrap");
+      const requestedSeasonId = initialUrl.searchParams.get("season_id") || "";
+      const requestedPracticeId = initialUrl.searchParams.get("practice_id") || "";
+      if (requestedPracticeId && !requestedSeasonId) {
+        showConnection("error", "链接不完整", "训练链接缺少赛季编号，请从本季训练卡片重新进入。");
+        if (pageTitle) pageTitle.textContent = "请使用完整训练链接";
+        return;
+      }
+      const response = await client.get("bootstrap", requestedSeasonId ? { season_id: requestedSeasonId } : {});
       const data = response.data;
+      const serverTime = Date.parse(response.meta.server_time);
+      if (Number.isFinite(serverTime)) serverOffsetMs = serverTime - Date.now();
+      season = data.season;
       showConnection("ready", "连接正常", "已读取最新公开训练计划。", `contract ${response.meta.contract_version}`);
       if (!data.season) {
         if (pageTitle) pageTitle.textContent = "目前没有开放赛季";
@@ -222,10 +623,17 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
         joinLink.hidden = !data.season.join_form_url || data.season.status !== "OPEN";
       }
       renderWeeks(data);
-      await renderRoster(client, data.season);
+      try { await renderRoster(client, data.season); }
+      catch {
+        if (rosterSummary) rosterSummary.hidden = false;
+        if (rosterCount) rosterCount.textContent = "姓名暂时无法读取";
+        if (rosterDetail) rosterDetail.textContent = "训练安排仍可查看，请进入训练详情后刷新重试。";
+      }
+      if (requestedPracticeId) await openPractice(requestedPracticeId);
     } catch (error) {
       const code = error instanceof DragonBoatApiError ? error.code : "UNKNOWN_ERROR";
       showConnection("error", "读取失败", "暂时无法读取训练计划，请稍后重试。", code);
+      if (loadingCard) loadingCard.hidden = false;
       if (pageTitle) pageTitle.textContent = "训练计划暂时无法读取";
     }
   }

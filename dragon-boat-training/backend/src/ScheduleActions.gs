@@ -126,63 +126,112 @@ function updateTrainingWeek_(request) {
       season_version: Number(request.season_version),
       week_start_date: weekStartDate
     });
+    var weekId = "week_" + hmacDigest_(season.season_id + "\n" + weekStartDate, getRequiredScriptProperty_(DRAGON_BOAT_PROPERTY_KEYS_.CODE_SECRET)).slice(0, 20);
     var transaction = beginSystemRequest_(actorId, "updateTrainingWeek", request.request_id, payloadDigest, {
-      week_id: "week_" + hmacDigest_(season.season_id + "\n" + weekStartDate, getRequiredScriptProperty_(DRAGON_BOAT_PROPERTY_KEYS_.CODE_SECRET)).slice(0, 20)
+      kind: "TRAINING_WEEK_PLAN_V1", week_id: weekId, plan: null, result: null
     });
-    if (String(transaction.record.status) === "COMPLETED") return readSystemRequestResult_(transaction.record);
-    requireVersion_(season.season_version, request.season_version, "season");
-    if (weekStartDate > season.end_date || addCalendarDays_(weekStartDate, 6) < season.start_date) {
-      throw dragonBoatRequestError_("WEEK_OUTSIDE_SEASON", "The training week is outside the season.");
+    var saved = readSystemRequestResult_(transaction.record);
+    if (String(transaction.record.status) === "COMPLETED") {
+      return saved.kind === "TRAINING_WEEK_PLAN_V1" ? saved.result : saved;
     }
-    var planned = readSystemRequestResult_(transaction.record);
-    var week = findSeasonSheetRecord_(season, "TrainingWeeks", "week_id", planned.week_id);
-    if (!week) {
-      var templates = getSeasonSheetRecords_(season, "ScheduleTemplates").filter(function (template) {
-        return isTrue_(template.active);
-      });
-      if (!templates.length) {
-        throw dragonBoatRequestError_("SCHEDULE_TEMPLATES_REQUIRED", "Configure at least one training template first.");
+    // A saved result is separate from the immutable plan, including before the completion write.
+    var result = saved.kind === "TRAINING_WEEK_PLAN_V1" ? saved.result : (saved.week && Array.isArray(saved.practices) ? saved : null);
+    if (!result) {
+      var week = findSeasonSheetRecord_(season, "TrainingWeeks", "week_id", weekId);
+      if (!saved.plan) {
+        if (transaction.replayed && week) {
+          throw dragonBoatRequestError_("RECOVERY_REQUIRED", "The unfinished training week has no saved generation plan. Review it before continuing.", true);
+        }
+        requireVersion_(season.season_version, request.season_version, "season");
+        if (weekStartDate > season.end_date || addCalendarDays_(weekStartDate, 6) < season.start_date) {
+          throw dragonBoatRequestError_("WEEK_OUTSIDE_SEASON", "The training week is outside the season.");
+        }
+        saved = {
+          kind: "TRAINING_WEEK_PLAN_V1", week_id: weekId,
+          plan: week ? { existing_week: true } : buildTrainingWeekGenerationPlan_(season, weekId, weekStartDate),
+          result: null
+        };
+        // Persist every template instance before the first business row can be written.
+        setSystemRequestResult_(transaction.record, saved);
+        SpreadsheetApp.flush();
       }
-      var now = new Date().toISOString();
-      week = appendSeasonSheetRecord_(season, "TrainingWeeks", {
-        season_id: season.season_id,
-        week_id: planned.week_id,
-        week_start_date: weekStartDate,
-        scheduled_open_at: "",
-        status: "DRAFT",
-        week_version: 1,
-        confirmed_version: "",
-        confirmed_by: "",
-        confirmed_at: "",
-        published_at: "",
-        created_at: now,
-        updated_at: now
-      });
-      templates.forEach(function (template) {
-        var practiceDate = addCalendarDays_(weekStartDate, Number(template.day_of_week) - 1);
-        if (practiceDate < season.start_date || practiceDate > season.end_date) return;
-        var startAt = localDateTimeToIso_(practiceDate, String(template.start_time), season.timezone);
-        var endAt = localDateTimeToIso_(practiceDate, String(template.end_time), season.timezone);
-        createPracticeRecord_(season, week, {
-          practice_id: "practice_" + hmacDigest_(planned.week_id + "\n" + template.template_id, getRequiredScriptProperty_(DRAGON_BOAT_PROPERTY_KEYS_.CODE_SECRET)).slice(0, 20),
-          template_id: template.template_id,
-          generation_key: season.season_id + ":" + planned.week_id + ":" + template.template_id,
-          start_at: startAt,
-          end_at: endAt,
-          location: template.location,
-          address: template.address,
-          map_url: template.map_url,
-          now: now
-        });
-      });
+      if (!saved.plan.existing_week) {
+        week = applyTrainingWeekGenerationPlan_(season, saved.plan);
+      } else if (!week) {
+        throw dragonBoatRequestError_("RECOVERY_REQUIRED", "The existing training week could not be recovered.", true);
+      }
+      result = trainingWeekManagementProjection_(season, week);
+      saved.result = result;
+      setSystemRequestResult_(transaction.record, saved);
     }
-    var result = trainingWeekManagementProjection_(season, week);
-    setSystemRequestResult_(transaction.record, result);
-    appendSeasonAudit_(season, request.request_id, "COACH", actorId, "TRAINING_WEEK_PREPARED", "WEEK", week.week_id, {
-      week_version: Number(week.week_version)
-    });
+    ensureTrainingWeekPreparedAudit_(season, transaction.record, actorId, result.week);
     completeSystemRequest_(transaction.record);
     return result;
+  });
+}
+
+function buildTrainingWeekGenerationPlan_(season, weekId, weekStartDate) {
+  var templates = getSeasonSheetRecords_(season, "ScheduleTemplates").filter(function (template) {
+    return isTrue_(template.active);
+  });
+  if (!templates.length) {
+    throw dragonBoatRequestError_("SCHEDULE_TEMPLATES_REQUIRED", "Configure at least one training template first.");
+  }
+  var now = new Date().toISOString();
+  var plan = {
+    week: {
+      season_id: season.season_id, week_id: weekId, week_start_date: weekStartDate,
+      scheduled_open_at: "", status: "DRAFT", week_version: 1,
+      confirmed_version: "", confirmed_by: "", confirmed_at: "", published_at: "",
+      created_at: now, updated_at: now
+    },
+    practices: []
+  };
+  templates.forEach(function (template) {
+    var practiceDate = addCalendarDays_(weekStartDate, Number(template.day_of_week) - 1);
+    if (practiceDate < season.start_date || practiceDate > season.end_date) return;
+    plan.practices.push({
+      practice_id: "practice_" + hmacDigest_(weekId + "\n" + template.template_id, getRequiredScriptProperty_(DRAGON_BOAT_PROPERTY_KEYS_.CODE_SECRET)).slice(0, 20),
+      template_id: template.template_id,
+      generation_key: season.season_id + ":" + weekId + ":" + template.template_id,
+      start_at: localDateTimeToIso_(practiceDate, String(template.start_time), season.timezone),
+      end_at: localDateTimeToIso_(practiceDate, String(template.end_time), season.timezone),
+      location: template.location, address: template.address, map_url: template.map_url, now: now
+    });
+  });
+  return plan;
+}
+
+function applyTrainingWeekGenerationPlan_(season, plan) {
+  var week = findSeasonSheetRecord_(season, "TrainingWeeks", "week_id", plan.week.week_id);
+  if (!week) week = appendSeasonSheetRecord_(season, "TrainingWeeks", plan.week);
+  plan.practices.forEach(function (values) {
+    var existing = findSeasonSheetRecord_(season, "Practices", "practice_id", values.practice_id);
+    // Adjusted instances and cancellation tombstones remain authoritative.
+    if (existing) return;
+    if (String(week.status) !== "DRAFT") {
+      throw dragonBoatRequestError_("RECOVERY_REQUIRED", "The unfinished training week changed before recovery. Review it before continuing.", true);
+    }
+    createPracticeRecord_(season, week, values);
+  });
+  return week;
+}
+
+function ensureTrainingWeekPreparedAudit_(season, requestRecord, actorId, week) {
+  var eventId = deterministicEventId_(requestRecord, "TRAINING_WEEK_PREPARED");
+  var existing = getSeasonSheetRecords_(season, "AuditLog").some(function (event) {
+    return String(event.event_id) === eventId || (
+      String(event.request_id) === String(requestRecord.request_id) &&
+      String(event.actor_id) === actorId && String(event.action) === "TRAINING_WEEK_PREPARED" &&
+      String(event.entity_id) === String(week.week_id)
+    );
+  });
+  if (existing) return;
+  appendSeasonSheetRecord_(season, "AuditLog", {
+    event_id: eventId, request_id: requestRecord.request_id, server_time: new Date().toISOString(),
+    season_id: season.season_id, entity_type: "WEEK", entity_id: week.week_id,
+    actor_type: "COACH", actor_id: actorId, action: "TRAINING_WEEK_PREPARED", status: "SUCCEEDED",
+    details_json: JSON.stringify({ week_version: Number(week.week_version) })
   });
 }
 

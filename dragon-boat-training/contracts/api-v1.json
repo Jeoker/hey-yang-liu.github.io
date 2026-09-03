@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "contract_version": "2026-09-02.p1.1",
+  "contract_version": "2026-09-02.p2.1",
   "service": "dragon-boat-training",
   "transport": {
     "get_action_parameter": "action",
@@ -18,7 +18,7 @@
       "ok": true,
       "data": "action-specific object",
       "meta": {
-        "contract_version": "2026-09-02.p1.1",
+        "contract_version": "2026-09-02.p2.1",
         "server_time": "ISO 8601 timestamp",
         "request_id": "request identifier"
       }
@@ -31,13 +31,73 @@
         "retryable": "boolean"
       },
       "meta": {
-        "contract_version": "2026-09-02.p1.1",
+        "contract_version": "2026-09-02.p2.1",
         "server_time": "ISO 8601 timestamp",
         "request_id": "request identifier"
       }
     }
   },
   "actions": {
+    "practice": {
+      "methods": ["GET"], "authentication": "public", "writes_data": false,
+      "request_fields": ["season_id", "practice_id"],
+      "response_fields": ["season_id", "practice", "signup_version", "roster_version", "binding_version", "signup_open", "management_signup_open", "closed_reason", "counts", "signups"],
+      "notes": "Requires both a published practice and an opened week. Reads the latest signup state, never a ten-minute training cache. Cancelled rows are excluded. Confirmed and waitlisted rows carry member_id, display_name, preference, status, queue_at, queue_sequence and waitlist_position."
+    },
+    "signup": {
+      "methods": ["POST"], "authentication": "public", "writes_data": true,
+      "request_fields": ["season_id", "practice_id", "member_id", "practice_version", "signup_version", "preference"],
+      "response_fields": ["season_id", "practice_id", "signup_version", "signup", "promoted_member_ids"],
+      "notes": "Creates or reactivates a cancelled signup with a new queue timestamp and sequence. Public identity is selected, not authenticated."
+    },
+    "updateSignup": {
+      "methods": ["POST"], "authentication": "public", "writes_data": true,
+      "request_fields": ["season_id", "practice_id", "member_id", "practice_version", "signup_version", "preference"],
+      "response_fields": ["season_id", "practice_id", "signup_version", "signup", "promoted_member_ids"],
+      "notes": "Preserves the existing queue timestamp and sequence; identical preference is a no-op. Target-side capacity can produce WAITLISTED as a successful result."
+    },
+    "cancelSignup": {
+      "methods": ["POST"], "authentication": "public", "writes_data": true,
+      "request_fields": ["season_id", "practice_id", "member_id", "practice_version", "signup_version"],
+      "response_fields": ["season_id", "practice_id", "signup_version", "signup", "promoted_member_ids"]
+    },
+    "signupByCoach": {
+      "methods": ["POST"], "authentication": "session_token", "writes_data": true,
+      "request_fields": ["session_token", "season_id", "practice_id", "member_id", "practice_version", "signup_version", "preference"],
+      "response_fields": ["season_id", "practice_id", "signup_version", "signup", "promoted_member_ids"]
+    },
+    "updateSignupByCoach": {
+      "methods": ["POST"], "authentication": "session_token", "writes_data": true,
+      "request_fields": ["session_token", "season_id", "practice_id", "member_id", "practice_version", "signup_version", "preference"],
+      "response_fields": ["season_id", "practice_id", "signup_version", "signup", "promoted_member_ids"]
+    },
+    "cancelSignupByCoach": {
+      "methods": ["POST"], "authentication": "session_token", "writes_data": true,
+      "request_fields": ["session_token", "season_id", "practice_id", "member_id", "practice_version", "signup_version"],
+      "response_fields": ["season_id", "practice_id", "signup_version", "signup", "promoted_member_ids"]
+    },
+    "listSeasonMembers": {
+      "methods": ["POST"], "authentication": "session_token", "writes_data": false,
+      "request_fields": ["session_token", "season_id"],
+      "response_fields": ["season_id", "roster_version", "members"],
+      "notes": "Members include source_display_name, display_name_override, display_name, default_preference, status, member_version, and active_links. No raw responses or contact fields are returned."
+    },
+    "updateMember": {
+      "methods": ["POST"], "authentication": "session_token", "writes_data": true,
+      "request_fields": ["session_token", "season_id", "member_id", "member_version", "display_name_override", "default_preference"],
+      "response_fields": ["season_id", "roster_version", "member"]
+    },
+    "restoreMemberName": {
+      "methods": ["POST"], "authentication": "session_token", "writes_data": true,
+      "request_fields": ["session_token", "season_id", "member_id", "member_version"],
+      "response_fields": ["season_id", "roster_version", "member"]
+    },
+    "setMemberStatus": {
+      "methods": ["POST"], "authentication": "session_token", "writes_data": true,
+      "request_fields": ["session_token", "season_id", "member_id", "member_version", "status"],
+      "response_fields": ["season_id", "roster_version", "member"],
+      "notes": "ACTIVE or INACTIVE. Deactivation is rejected while unfinished training associations remain."
+    },
     "health": {
       "methods": ["GET", "POST"],
       "authentication": "public",
@@ -186,5 +246,8 @@
     "SEASON_NOT_FOUND",
     "SEASON_NOT_OPEN",
     "BINDING_LOCKED"
-  ]
+  ],
+  "signup_errors": ["VERSION_CONFLICT", "PRACTICE_NOT_PUBLIC", "MEMBER_NOT_FOUND", "MEMBER_INACTIVE", "INVALID_PREFERENCE", "SIGNUP_EXISTS", "SIGNUP_NOT_ACTIVE", "SIGNUP_CLOSED", "PRACTICE_ENDED", "PRACTICE_CANCELLED", "SIGNUP_RATE_LIMITED", "SEAT_PLAN_REQUIRES_P3"],
+  "member_errors": ["MEMBER_HAS_ACTIVE_LINKS", "MEMBER_NOT_FOUND", "VERSION_CONFLICT"],
+  "p2_write_protocol": "POST timeout is 30 seconds. Freeze request_id and all business parameters while the result is unknown. Completed requests return the original result even after later state changes; GET practice afterwards for current state. Unfinished plans recover under the shared script lock before subsequent reads/writes."
 }
