@@ -130,6 +130,7 @@ function getSessionTtlSeconds_() {
 
 var dragonBoatLockDepth_ = 0;
 var dragonBoatStoreHandles_ = null;
+var dragonBoatRecordCache_ = null;
 
 function withDragonBoatScriptLock_(callback) {
   // Nested service helpers share the lock in this execution, never across requests.
@@ -148,6 +149,7 @@ function withDragonBoatScriptLock_(callback) {
   try {
     dragonBoatLockDepth_ += 1;
     dragonBoatStoreHandles_ = {};
+    dragonBoatRecordCache_ = {};
     recoverP2Requests_();
     return callback();
   } finally {
@@ -157,6 +159,7 @@ function withDragonBoatScriptLock_(callback) {
     } finally {
       dragonBoatLockDepth_ -= 1;
       dragonBoatStoreHandles_ = null;
+      dragonBoatRecordCache_ = null;
       lock.releaseLock();
     }
   }

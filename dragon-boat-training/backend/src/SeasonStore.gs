@@ -145,11 +145,13 @@ function getSeasonSheet_(season, sheetName) {
 }
 
 function getSeasonSheetRecords_(season, sheetName) {
+  var cacheKey = seasonRecordCacheKey_(season, sheetName);
+  if (dragonBoatRecordCache_ && dragonBoatRecordCache_[cacheKey]) return cloneDragonBoatRecords_(dragonBoatRecordCache_[cacheKey]);
   var sheet = getSeasonSheet_(season, sheetName);
   var headers = DRAGON_BOAT_RUNTIME_SHEET_HEADERS_[sheetName];
   var lastRow = sheet.getLastRow();
   if (lastRow <= 1) return [];
-  return sheet.getRange(2, 1, lastRow - 1, headers.length).getValues().map(function (row, index) {
+  var result = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues().map(function (row, index) {
     var record = { _rowNumber: index + 2 };
     headers.forEach(function (header, columnIndex) {
       record[header] = row[columnIndex];
@@ -158,6 +160,12 @@ function getSeasonSheetRecords_(season, sheetName) {
   }).filter(function (record) {
     return !record.season_id || String(record.season_id) === String(season.season_id);
   });
+  if (dragonBoatRecordCache_) dragonBoatRecordCache_[cacheKey] = cloneDragonBoatRecords_(result);
+  return result;
+}
+
+function seasonRecordCacheKey_(season, sheetName) {
+  return "season:" + season.runtime_spreadsheet_id + ":" + season.season_id + ":" + sheetName;
 }
 
 function appendSeasonSheetRecord_(season, sheetName, record) {
@@ -168,6 +176,7 @@ function appendSeasonSheetRecord_(season, sheetName, record) {
     return record[header] === undefined || record[header] === null ? "" : String(record[header]);
   }));
   record._rowNumber = rowNumber;
+  if (dragonBoatRecordCache_) delete dragonBoatRecordCache_[seasonRecordCacheKey_(season, sheetName)];
   return record;
 }
 
@@ -180,6 +189,7 @@ function updateSeasonSheetRecord_(season, sheetName, record) {
   writeSheetRow_(sheet, record._rowNumber, headers.map(function (header) {
     return record[header] === undefined || record[header] === null ? "" : String(record[header]);
   }));
+  if (dragonBoatRecordCache_) delete dragonBoatRecordCache_[seasonRecordCacheKey_(season, sheetName)];
   return record;
 }
 

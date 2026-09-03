@@ -64,6 +64,8 @@ function getSystemSheet_(sheetName) {
 }
 
 function getSheetRecords_(sheetName) {
+  var cacheKey = "system:" + sheetName;
+  if (dragonBoatRecordCache_ && dragonBoatRecordCache_[cacheKey]) return cloneDragonBoatRecords_(dragonBoatRecordCache_[cacheKey]);
   var sheet = getSystemSheet_(sheetName);
   var headers = DRAGON_BOAT_SHEET_HEADERS_[sheetName];
   var lastRow = sheet.getLastRow();
@@ -71,13 +73,19 @@ function getSheetRecords_(sheetName) {
     return [];
   }
   var rows = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
-  return rows.map(function (row, rowIndex) {
+  var result = rows.map(function (row, rowIndex) {
     var record = { _rowNumber: rowIndex + 2 };
     headers.forEach(function (header, columnIndex) {
       record[header] = row[columnIndex];
     });
     return record;
   });
+  if (dragonBoatRecordCache_) dragonBoatRecordCache_[cacheKey] = cloneDragonBoatRecords_(result);
+  return result;
+}
+
+function cloneDragonBoatRecords_(records) {
+  return JSON.parse(JSON.stringify(records));
 }
 
 function appendSheetRecord_(sheetName, record) {
@@ -90,6 +98,7 @@ function appendSheetRecord_(sheetName, record) {
       : String(record[header]);
   }));
   record._rowNumber = rowNumber;
+  if (dragonBoatRecordCache_) delete dragonBoatRecordCache_["system:" + sheetName];
   return record;
 }
 
@@ -104,6 +113,7 @@ function updateSheetRecord_(sheetName, record) {
       ? ""
       : String(record[header]);
   }));
+  if (dragonBoatRecordCache_) delete dragonBoatRecordCache_["system:" + sheetName];
   return record;
 }
 
