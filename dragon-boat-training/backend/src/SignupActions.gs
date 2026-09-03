@@ -174,7 +174,7 @@ function publicPractice_(request) {
     roster.members.forEach(function (member) { names[member.member_id] = member.display_name; });
     var waitlistPosition = 0;
     return {
-      season_id: String(season.season_id), practice: practiceProjection_(practice),
+      season_id: String(season.season_id), generated_at: new Date().toISOString(), practice: practiceProjection_(practice),
       signup_version: state.version, roster_version: Number(season.roster_version),
       binding_version: Number(season.binding_version),
       signup_open: !signupClosedReason_(season, practice, false),
@@ -222,7 +222,7 @@ function mutateSignup_(request) {
       member_id: memberId, preference: preference, practice_version: request.practice_version,
       signup_version: request.signup_version });
     var previous = findMatchingSystemRequest_(scope, request.action, request.request_id, digest);
-    if (previous) return applyP2Request_(previous);
+    if (previous) return attachP21View_(request, applyP2Request_(previous), management);
     var practice = requirePublicPractice_(season, practiceId);
     var reason = signupClosedReason_(season, practice, management);
     if (reason) throw dragonBoatRequestError_(reason, "Signups cannot be changed at this time.");
@@ -283,11 +283,47 @@ function mutateSignup_(request) {
     }).map(function (row) { return String(row.member_id); });
     var result = { season_id: String(season.season_id), practice_id: practiceId,
       signup_version: state.version, signup: signupProjection_(target), promoted_member_ids: promoted };
-    return persistP2Request_(scope, request, digest, {
+    var committed = persistP2Request_(scope, request, digest, {
       season_id: String(season.season_id), practice_id: practiceId, at: now,
       actor_type: management ? "COACH" : "ANONYMOUS", actor_id: actorId,
       signups: changed, signup_state: noChange ? null : state,
       before: changed.map(function (row) { return beforeByMember[row.member_id] || null; })
     }, result);
+    return attachP21View_(request, committed, management);
   });
+}
+
+// Response-only extension: immutable journal results never contain a stale view.
+// All callers hold the outer lock and have authenticated management requests.
+function attachP21View_(request, result, management) {
+  if (request.include_current_view !== true) return result;
+  var response = Object.assign({}, result, { view_status: "refresh_required", current_view: null });
+  try {
+    var season = requireSeason_(request.season_id);
+    var view = { season_id: String(season.season_id), season_status: seasonEffectiveStatus_(season),
+      roster_version: Number(season.roster_version), binding_version: Number(season.binding_version) };
+    var practiceId = result.practice_id || request.view_practice_id;
+    if (practiceId) view.practice = publicPractice_({ season_id: season.season_id, practice_id: practiceId });
+    if (management) {
+      var links = allMemberActiveLinks_(season);
+      view.member_links = links;
+      if (request.known_roster_version !== Number(season.roster_version)) {
+        view.members = getSeasonSheetRecords_(season, "Members").map(function (member) {
+          return memberManagementProjection_(season, member, links[member.member_id] || []);
+        });
+      }
+    } else if (view.season_status === "OPEN" &&
+        (request.known_roster_version !== Number(season.roster_version) ||
+         !(Date.parse(request.roster_expires_at) > Date.now()))) {
+      view.roster = getPublicRosterSnapshot_(season, false);
+    }
+    view.generated_at = new Date().toISOString();
+    response.current_view = view;
+    response.view_status = "ready";
+  } catch (error) {
+    // The write has already committed. Read/projection failure must not turn it
+    // into another business mutation or expose internal configuration errors.
+    response.view_status = "refresh_required";
+  }
+  return response;
 }

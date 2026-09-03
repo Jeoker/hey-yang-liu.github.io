@@ -4,6 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import { DragonBoatApiError } from "../frontend/lib/api-client.js";
+import { validPracticeView, olderPracticeView, usableRoster } from "../frontend/lib/current-view.js";
 import { renderSignupList, signupPreferenceLabels, signupResultText } from "../frontend/lib/signup-view.js";
 
 const astroSource = await fs.readFile(new URL("../frontend/components/DragonBoatApp.astro", import.meta.url), "utf8");
@@ -61,7 +62,7 @@ function makeHarness({ post, readPractice, publishedPractices = [] } = {}) {
   class Client {
     async get(action) {
       if (action === "bootstrap") return envelope({ season, state: "ACTIVE", weeks: publishedPractices.length ? [{ week_start_date: "2099-09-07", practices: publishedPractices.map((overrides) => ({ ...practice, ...overrides })) }] : [] });
-      if (action === "members") return envelope({ season_id: season.season_id, members: [{ member_id: "member_alice", display_name: "Alice", default_preference: "AMBIENT" }, { member_id: "member_bob", display_name: "Bob", default_preference: "LEFT" }], expires_at: "2099-09-09T20:00:00.000Z" });
+      if (action === "members") return envelope({ season_id: season.season_id, roster_version: 1, binding_version: 1, members: [{ member_id: "member_alice", display_name: "Alice", default_preference: "AMBIENT" }, { member_id: "member_bob", display_name: "Bob", default_preference: "LEFT" }], expires_at: "2099-09-09T20:00:00.000Z" });
       if (action === "practice") {
         state.practiceReads++;
         if (readPractice) await readPractice(state);
@@ -83,7 +84,7 @@ function makeHarness({ post, readPractice, publishedPractices = [] } = {}) {
     DragonBoatApiClient: Client, DragonBoatApiError,
     createRequestId: () => `request_${state.posts.length + 1}`,
     loadRosterSnapshot: () => null, saveRosterSnapshot() {},
-    renderSignupList, signupPreferenceLabels, signupResultText
+    renderSignupList, signupPreferenceLabels, signupResultText, validPracticeView, olderPracticeView, usableRoster
   });
   vm.runInContext(compiledScript, context);
   const element = (name) => {
@@ -132,6 +133,42 @@ test("uncertain public signup freezes inputs and replays the same request and pa
   assert.deepEqual(harness.state.posts[0], harness.state.posts[1]);
   assert.equal(harness.element("retry-signup").hidden, true);
   assert.equal(harness.element("member-select").disabled, false);
+});
+
+test("public signup renders the committed current view without another practice read", async () => {
+  const harness = makeHarness({ post: (state, _action, payload, _options, envelope) => {
+    assert.equal(payload.include_current_view, true);
+    state.signupVersion++;
+    state.signups = [{ member_id: payload.member_id, display_name: "Alice", preference: "LEFT", status: "CONFIRMED" }];
+    return envelope({ signup: state.signups[0], view_status: "ready", current_view: {
+      season_id: state.season.season_id, season_status: "OPEN", roster_version: 1, binding_version: 1,
+      generated_at: new Date().toISOString(), practice: { season_id: state.season.season_id, practice: state.practice,
+        roster_version: 1, binding_version: 1, signup_version: state.signupVersion, signup_open: true,
+        counts: { confirmed: 1, total_capacity: 20, waitlisted: 0, left: 1, right: 0, ambient: 0 }, signups: state.signups }
+    } });
+  } });
+  await selectAndConfirm(harness);
+  await settled(() => harness.element("signup-status").textContent.includes("已确认 Left"));
+  assert.equal(harness.state.posts.length, 1);
+  assert.equal(harness.state.practiceReads, 1);
+  assert.equal(harness.element("signup-preference").disabled, false);
+});
+
+test("a slow public refresh keeps fields editable and preserves a new side choice", async () => {
+  let release;
+  const harness = makeHarness({ readPractice: state => state.practiceReads > 1 ? new Promise(resolve => { release = resolve; }) : undefined });
+  await settled(() => harness.element("signup-status").textContent.includes("已读取最新报名情况"));
+  harness.element("member-select").value = "member_alice";
+  harness.element("member-select").emit("change");
+  harness.element("refresh-practice").emit("click");
+  assert.equal(harness.element("member-select").disabled, false);
+  assert.equal(harness.element("signup-preference").disabled, false);
+  harness.element("signup-preference").value = "RIGHT";
+  harness.element("signup-preference").emit("change");
+  release();
+  await settled(() => harness.element("refresh-practice").disabled === false);
+  assert.equal(harness.element("signup-preference").value, "RIGHT");
+  assert.equal(harness.state.posts.length, 0);
 });
 
 test("accepted public signup with failed readback retries GET without another POST", async () => {

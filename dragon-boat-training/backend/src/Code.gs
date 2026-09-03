@@ -38,6 +38,8 @@ function handleDragonBoatRequest_(method, event) {
         return dragonBoatSuccess_(mutateSignup_(request), requestId);
       case "listSeasonMembers":
         return dragonBoatSuccess_(listSeasonMembers_(request), requestId);
+      case "getMemberWorkspace":
+        return dragonBoatSuccess_(getMemberWorkspace_(request), requestId);
       case "updateMember":
       case "restoreMemberName":
       case "setMemberStatus":

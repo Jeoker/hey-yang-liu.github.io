@@ -88,6 +88,75 @@ function fill(fixture, start, count, preference) {
   }
 }
 
+test("P2.1 public commit returns a current view without storing it in the immutable result", async () => {
+  const f = await createFixture();
+  const request = f.body("signup", 0, "LEFT", { include_current_view: true });
+  const result = expectSuccess(post(f.backend.context, request));
+  assert.equal(result.view_status, "ready");
+  assert.equal(result.current_view.practice.counts.confirmed, 1);
+  assert.equal(result.current_view.practice.signup_version, result.signup_version);
+  assert.ok(result.current_view.roster.members.length);
+  assert.equal(result.current_view.members, undefined);
+  assert.equal(result.current_view.member_links, undefined);
+  assert.equal(JSON.stringify(sheetRecords(f.backend.spreadsheet, "SystemRequests")).includes('current_view'), false);
+  expectSuccess(f.mutate("cancelSignup", 0));
+  const replay = expectSuccess(post(f.backend.context, request));
+  assert.equal(replay.signup.status, "CONFIRMED", "immutable operation result is preserved");
+  assert.equal(replay.current_view.practice.counts.confirmed, 0, "replay reads the current state");
+  assert.equal(f.signupRows().length, 1);
+});
+
+test("P2.1 projection failure preserves a successful commit and replay cannot duplicate it", async () => {
+  const f = await createFixture();
+  const request = f.body("signup", 0, "LEFT", { include_current_view: true });
+  const original = f.backend.context.publicPractice_;
+  f.backend.context.publicPractice_ = () => { throw new Error("projection interrupted"); };
+  const result = expectSuccess(post(f.backend.context, request));
+  assert.equal(result.view_status, "refresh_required");
+  assert.equal(result.current_view, null);
+  f.backend.context.publicPractice_ = original;
+  const replay = expectSuccess(post(f.backend.context, request));
+  assert.equal(replay.view_status, "ready");
+  assert.equal(replay.signup_version, result.signup_version);
+  assert.equal(replay.current_view.practice.counts.confirmed, 1);
+  assert.equal(f.signupRows().length, 1);
+});
+
+test("P2.1 workspace authenticates and management writes return fresh names and associations", async () => {
+  const f = await createFixture();
+  expectError(f.send("getMemberWorkspace", { season_id: f.season.season_id }), "INVALID_REQUEST");
+  const workspace = expectSuccess(f.send("getMemberWorkspace", { season_id: f.season.season_id, session_token: f.token }));
+  assert.equal(workspace.members.length, 30);
+  assert.equal(workspace.practices.length, 1);
+  assert.equal(workspace.practice.practice.practice_id, f.practice.practice_id);
+  const signup = expectSuccess(f.mutate("signupByCoach", 0, "LEFT", { include_current_view: true, known_roster_version: workspace.roster_version }));
+  assert.equal(signup.current_view.members, undefined);
+  assert.equal(signup.current_view.member_links[f.members[0].member_id].length, 1);
+  const renamed = expectSuccess(post(f.backend.context, f.memberBody("updateMember", 0, {
+    display_name_override: "Corrected", default_preference: "RIGHT", include_current_view: true,
+    known_roster_version: workspace.roster_version, view_practice_id: f.practice.practice_id
+  })));
+  assert.equal(renamed.current_view.members[0].display_name, "Corrected");
+  assert.equal(renamed.current_view.practice.signups[0].display_name, "Corrected");
+  assert.equal(renamed.current_view.practice.signups[0].preference, "LEFT");
+  expectSuccess(f.send("coachLogout", { session_token: f.token }));
+  assert.equal(f.send("getMemberWorkspace", { season_id: f.season.season_id, session_token: f.token }).ok, false);
+});
+
+test("P2.1 roster reuse requires matching version and a live expiry; replay observes cutoff", async () => {
+  const f = await createFixture();
+  const roster = expectSuccess(f.get("members"));
+  const request = f.body("signup", 0, "LEFT", { include_current_view: true,
+    known_roster_version: roster.roster_version, roster_expires_at: roster.expires_at });
+  assert.equal(expectSuccess(post(f.backend.context, request)).current_view.roster, undefined);
+  f.setTime(Date.parse(roster.expires_at));
+  assert.ok(expectSuccess(post(f.backend.context, request)).current_view.roster);
+  f.setTime(f.practice.signup_cutoff_at);
+  const replay = expectSuccess(post(f.backend.context, request));
+  assert.equal(replay.current_view.practice.signup_open, false);
+  assert.equal(replay.current_view.practice.counts.confirmed, 1);
+});
+
 function interruptOnceAfter(fixture, method, predicate) {
   const original = fixture.backend.context[method];
   let fired = false;

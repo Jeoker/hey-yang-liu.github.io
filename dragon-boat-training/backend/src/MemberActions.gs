@@ -70,7 +70,7 @@ function mutateMember_(request) {
     }
     var digest = digestRequestPayload_(input);
     var prior = findMatchingSystemRequest_(scope, request.action, request.request_id, digest);
-    if (prior) return applyP2Request_(prior);
+    if (prior) return attachP21View_(request, applyP2Request_(prior), true);
     ensureSeasonOpen_(season);
     var member = requireSeasonMember_(season, memberId);
     requireVersion_(member.member_version, request.member_version, "member");
@@ -90,9 +90,27 @@ function mutateMember_(request) {
     var rosterVersion = Number(season.roster_version) + 1;
     var result = { season_id: String(season.season_id), roster_version: rosterVersion,
       member: memberManagementProjection_(season, member) };
-    return persistP2Request_(scope, request, digest, {
+    var committed = persistP2Request_(scope, request, digest, {
       season_id: String(season.season_id), actor_id: actorId, actor_type: "COACH", at: patch.updated_at,
       member: patch, roster_version: rosterVersion, before: before
     }, result);
+    return attachP21View_(request, committed, true);
+  });
+}
+
+function getMemberWorkspace_(request) {
+  return withDragonBoatScriptLock_(function () {
+    validateCoachSession_(requireRequestString_(request, "session_token", 32, 2048));
+    var season = requireSeason_(request.season_id);
+    ensureSeasonOpen_(season);
+    var published = publicBootstrap_({ season_id: season.season_id });
+    var practices = [];
+    published.weeks.forEach(function (week) { practices = practices.concat(week.practices); });
+    practices.sort(function (left, right) { return left.start_at.localeCompare(right.start_at); });
+    var practiceId = request.practice_id || (practices[0] && practices[0].practice_id);
+    var viewRequest = Object.assign({}, request, { include_current_view: true, view_practice_id: practiceId });
+    var result = attachP21View_(viewRequest, {}, true);
+    if (result.view_status !== "ready") throw dragonBoatRequestError_("VIEW_UNAVAILABLE", "The management view could not be read. Please refresh.", true);
+    return Object.assign({}, result.current_view, { season: seasonManagementProjection_(season), practices: practices });
   });
 }

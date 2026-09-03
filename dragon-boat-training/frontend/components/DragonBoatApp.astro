@@ -131,6 +131,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   import { DragonBoatApiClient, DragonBoatApiError, createRequestId } from "../lib/api-client.js";
   import { loadRosterSnapshot, saveRosterSnapshot } from "../lib/public-roster-cache.js";
   import { renderSignupList, signupPreferenceLabels, signupResultText } from "../lib/signup-view.js";
+  import { validPracticeView, olderPracticeView, usableRoster } from "../lib/current-view.js";
 
   const root = document.querySelector<HTMLElement>("[data-dragon-boat-app]");
   const loadingCard = root?.querySelector<HTMLElement>("[data-loading-card]");
@@ -188,6 +189,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   let confirmation: any = null;
   let pendingWrite: any = null;
   let serverOffsetMs = 0;
+  let preferenceDirty = false;
   const closedMessages: Record<string, string> = {
     SEASON_NOT_OPEN: "本赛季已经结束，报名清单仅供查看。",
     PRACTICE_CANCELLED: "本次训练已取消，报名清单仅供查看。",
@@ -290,8 +292,8 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
 
   async function renderRoster(client: DragonBoatApiClient, currentSeason: any) {
     if (!rosterSummary || !rosterCount || !rosterDetail || currentSeason.status !== "OPEN") return;
-    let snapshot = null;
-    try { snapshot = loadRosterSnapshot(currentSeason); } catch { /* Storage can be unavailable in private mode. */ }
+    let snapshot = usableRoster(roster, currentSeason, Date.now() + serverOffsetMs) ? roster : null;
+    try { snapshot ||= loadRosterSnapshot(currentSeason); } catch { /* Storage can be unavailable in private mode. */ }
     let source = "本机缓存";
     if (!snapshot) {
       const response = await client.get("members", { season_id: currentSeason.season_id });
@@ -301,6 +303,8 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       source = "共享名单快照";
     }
     if (season?.season_id !== currentSeason.season_id) return;
+    if (snapshot.roster_version < season.roster_version || snapshot.binding_version < season.binding_version) return;
+    season = { ...season, roster_version: snapshot.roster_version, binding_version: snapshot.binding_version };
     roster = snapshot;
     rosterSummary.hidden = false;
     rosterCount.textContent = `${snapshot.members.length} 名本季有效队员`;
@@ -328,15 +332,15 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   }
 
   function updateControls() {
-    const locked = writing || reading || Boolean(pendingWrite) || Boolean(confirmation);
+    const locked = writing || Boolean(pendingWrite) || Boolean(confirmation);
     const open = signupIsOpen();
     const selected = Boolean(selectedMemberId && roster?.members?.some((member: any) => member.member_id === selectedMemberId));
     if (memberSearch) memberSearch.disabled = locked || !open;
     if (memberSelect) memberSelect.disabled = locked || !open;
     if (preferenceSelect) preferenceSelect.disabled = locked || !open || !selected;
-    if (submitSignup) submitSignup.disabled = locked || !open || !selected || (currentSignup()?.preference === preferenceSelect?.value);
-    if (cancelSignup) cancelSignup.disabled = locked || !open || !currentSignup();
-    if (refreshPractice) refreshPractice.disabled = locked;
+    if (submitSignup) submitSignup.disabled = locked || reading || !open || !selected || (currentSignup()?.preference === preferenceSelect?.value);
+    if (cancelSignup) cancelSignup.disabled = locked || reading || !open || !currentSignup();
+    if (refreshPractice) refreshPractice.disabled = locked || reading;
     if (confirmAction) confirmAction.disabled = writing || reading || Boolean(pendingWrite) || !open;
     if (dismissConfirm) dismissConfirm.disabled = writing || Boolean(pendingWrite);
     if (retrySignup) {
@@ -398,7 +402,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     renderMemberOptions();
   }
 
-  async function readPractice() {
+  async function readPractice(preserveInput = false) {
     if (!client || !season || !activePracticeId) return false;
     const sequence = ++readSequence;
     const seasonId = season.season_id;
@@ -409,7 +413,10 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       const response = await client.get("practice", { season_id: seasonId, practice_id: practiceId });
       if (sequence !== readSequence || seasonId !== season?.season_id || practiceId !== activePracticeId) return false;
       if (response.data.season_id !== seasonId || response.data.practice.practice_id !== practiceId) throw new Error("PRACTICE_ID_MISMATCH");
-      practiceData = response.data;
+      const next = { ...response.data, generated_at: response.data.generated_at || response.meta.server_time };
+      if (!validPracticeView(next, seasonId, practiceId)) throw new Error("PRACTICE_VIEW_INVALID");
+      if (olderPracticeView(next, practiceData)) return true;
+      practiceData = next;
       const serverTime = Date.parse(response.meta.server_time);
       if (Number.isFinite(serverTime)) serverOffsetMs = serverTime - Date.now();
       season = { ...season, roster_version: practiceData.roster_version, binding_version: practiceData.binding_version };
@@ -422,7 +429,9 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
         }
       }
       if (sequence !== readSequence || practiceId !== activePracticeId) return false;
+      const draftPreference = preserveInput && preferenceDirty ? preferenceSelect?.value : null;
       renderPractice();
+      if (draftPreference && preferenceSelect) preferenceSelect.value = draftPreference;
       return true;
     } finally {
       if (sequence === readSequence) {
@@ -437,6 +446,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     activePracticeId = practiceId;
     practiceData = null;
     selectedMemberId = "";
+    preferenceDirty = false;
     if (memberSearch) memberSearch.value = "";
     if (practicePanel) practicePanel.hidden = false;
     if (signupForm) signupForm.hidden = true;
@@ -493,13 +503,35 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   async function completeWriteReadback() {
     if (!pendingWrite?.accepted) return;
     const operation = pendingWrite;
-    if (!(await readPractice())) return;
+    const view = operation.result?.current_view;
+    let applied = false;
+    if (operation.result?.view_status === "ready" && view?.season_id === season?.season_id
+        && validPracticeView(view.practice, season.season_id, activePracticeId)) {
+      if (!olderPracticeView(view.practice, practiceData)) {
+        practiceData = view.practice;
+        season = { ...season, roster_version: view.roster_version, binding_version: view.binding_version,
+          status: view.season_status || season.status };
+        const at = Date.parse(view.generated_at);
+        if (Number.isFinite(at)) serverOffsetMs = at - Date.now();
+        if (usableRoster(view.roster, season, Date.now() + serverOffsetMs)) {
+          roster = view.roster;
+          try { saveRosterSnapshot(roster); } catch { /* Storage is optional. */ }
+        }
+        if (!usableRoster(roster, season, Date.now() + serverOffsetMs)) roster = null;
+        preferenceDirty = false;
+        renderPractice();
+        if (roster && client) await renderRoster(client, season);
+        applied = Boolean(roster || season.status !== "OPEN");
+      } else applied = true;
+    }
+    if (!applied && !(await readPractice())) return;
     const actualSignup = currentSignup(operation.payload.member_id);
     const promoted = operation.result?.promoted_member_ids || [];
     const promotedNames = promoted.map((id: string) => practiceData.signups.find((row: any) => row.member_id === id)?.display_name).filter(Boolean);
     const latest = actualSignup ? signupResultText(actualSignup) : "当前没有有效报名；重新报名将使用新的排队时间。";
     const promotionText = promotedNames.length ? ` 本次操作曾触发自动递补：${promotedNames.join("、")}。清单已显示当前最新状态。` : "";
     pendingWrite = null;
+    preferenceDirty = false;
     setSignupStatus(`${operation.displayName}：${latest}${promotionText}`, "ready");
     updateControls();
   }
@@ -550,8 +582,8 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   }
 
   memberSearch?.addEventListener("input", () => renderMemberOptions());
-  memberSelect?.addEventListener("change", () => { selectedMemberId = memberSelect.value; renderSelection(); });
-  preferenceSelect?.addEventListener("change", updateControls);
+  memberSelect?.addEventListener("change", () => { selectedMemberId = memberSelect.value; preferenceDirty = false; renderSelection(); });
+  preferenceSelect?.addEventListener("change", () => { preferenceDirty = true; updateControls(); });
   signupForm?.addEventListener("submit", (event) => { event.preventDefault(); prepareAction(currentSignup() ? "updateSignup" : "signup"); });
   cancelSignup?.addEventListener("click", () => prepareAction("cancelSignup"));
   dismissConfirm?.addEventListener("click", () => {
@@ -563,7 +595,9 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   });
   confirmAction?.addEventListener("click", () => {
     if (!confirmation || pendingWrite || writing || !signupIsOpen()) return;
-    pendingWrite = { ...confirmation, requestId: createRequestId(), accepted: false };
+    pendingWrite = { ...confirmation, payload: { ...confirmation.payload, include_current_view: true,
+      known_roster_version: roster?.roster_version, roster_expires_at: roster?.expires_at },
+      requestId: createRequestId(), accepted: false };
     confirmation = null;
     if (confirmPanel) confirmPanel.hidden = true;
     sendPendingWrite();
@@ -573,11 +607,10 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     if (writing || reading || pendingWrite || confirmation || !activePracticeId) return;
     setSignupStatus("正在刷新训练报名情况……");
     try {
-      if (await readPractice()) setSignupStatus(roster || season.status !== "OPEN" ? "已读取最新报名情况，请核对后操作。" : "姓名暂时读取失败，请刷新后重试。", roster || season.status !== "OPEN" ? "ready" : "error");
+      if (await readPractice(true)) setSignupStatus(roster || season.status !== "OPEN" ? "已读取最新报名情况，请核对后操作。" : "姓名暂时读取失败，请刷新后重试。", roster || season.status !== "OPEN" ? "ready" : "error");
     } catch {
-      practiceData = null;
       updateControls();
-      setSignupStatus("最新训练状态暂时读取失败。为避免误操作，请先刷新成功再报名或修改。", "error");
+      setSignupStatus("最新训练状态暂时读取失败，保留上次读取的内容。再次提交仍由服务器核对版本与余位。", "error");
     }
   }
   refreshPractice?.addEventListener("click", refreshActivePractice);

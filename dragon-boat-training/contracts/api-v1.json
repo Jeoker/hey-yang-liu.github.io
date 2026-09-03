@@ -2,6 +2,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "contract_version": "2026-09-02.p2.1",
   "service": "dragon-boat-training",
+  "extensions": {
+    "current_view": {
+      "since_service_version": "0.5.0-p2.1",
+      "compatibility": "Additive opt-in extension; contract version unchanged. Older clients receive the original result. New clients fall back to reads if the optional view is absent.",
+      "actions": ["signup", "updateSignup", "cancelSignup", "signupByCoach", "updateSignupByCoach", "cancelSignupByCoach", "updateMember", "restoreMemberName", "setMemberStatus"],
+      "optional_request_fields": ["include_current_view", "known_roster_version", "roster_expires_at", "view_practice_id"],
+      "response": "include_current_view=true adds view_status=ready|refresh_required and current_view. Original mutation result remains immutable; current_view is rebuilt after commit or replay under the same lock and is never stored in the journal. Projection failure returns a successful mutation with refresh_required and null view.",
+      "current_view_fields": ["season_id", "season_status", "roster_version", "binding_version", "generated_at", "optional practice", "optional roster", "management-only optional members", "management-only member_links"],
+      "practice": "Same projection as GET practice, including generated_at. Used to render present state rather than the historical mutation result.",
+      "roster": "Public roster returned when known_roster_version differs or roster_expires_at has expired. Cache hints never authorize a write. Browser validates season, binding and roster versions and absolute expiry.",
+      "management": "Full protected members returned only when roster version differs; current member_links always returned. view_practice_id scopes member-edit readback, cannot change the mutation target.",
+      "retry": "View preferences are excluded from the business payload digest. Unknown writes keep the original request ID and payload. An acknowledged write needing a view retries reads only. Late or wrong-entity views never replace newer visible data."
+    }
+  },
   "transport": {
     "get_action_parameter": "action",
     "post_content_type": "text/plain;charset=UTF-8",
@@ -38,10 +52,16 @@
     }
   },
   "actions": {
+    "getMemberWorkspace": {
+      "methods": ["POST"], "authentication": "session_token", "writes_data": false,
+      "request_fields": ["session_token", "season_id", "optional practice_id", "optional known_roster_version"],
+      "response_fields": ["season", "practices", "season_id", "season_status", "roster_version", "binding_version", "generated_at", "optional practice", "optional members", "member_links"],
+      "notes": "Reads an open season management workspace under one lock. Published practices only; chooses the first if practice_id is omitted. Returns full members if version differs. VIEW_UNAVAILABLE is a retryable read failure, never evidence of a failed prior mutation."
+    },
     "practice": {
       "methods": ["GET"], "authentication": "public", "writes_data": false,
       "request_fields": ["season_id", "practice_id"],
-      "response_fields": ["season_id", "practice", "signup_version", "roster_version", "binding_version", "signup_open", "management_signup_open", "closed_reason", "counts", "signups"],
+      "response_fields": ["season_id", "practice", "signup_version", "roster_version", "binding_version", "signup_open", "management_signup_open", "closed_reason", "counts", "signups", "generated_at"],
       "notes": "Requires both a published practice and an opened week. Reads the latest signup state, never a ten-minute training cache. Cancelled rows are excluded. Confirmed and waitlisted rows carry member_id, display_name, preference, status, queue_at, queue_sequence and waitlist_position."
     },
     "signup": {

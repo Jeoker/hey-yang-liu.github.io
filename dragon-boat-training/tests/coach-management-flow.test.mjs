@@ -4,13 +4,14 @@ import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import { DragonBoatApiError } from "../frontend/lib/api-client.js";
+import { validPracticeView, olderPracticeView } from "../frontend/lib/current-view.js";
 import { renderSignupList, signupResultText } from "../frontend/lib/signup-view.js";
 
 const source = await fs.readFile(new URL("../frontend/components/CoachModeApp.astro", import.meta.url), "utf8");
 const script = source.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;$/gm, "");
 const compiled = ts.transpileModule(script, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 
-function makeHarness({ mutate } = {}) {
+function makeHarness({ mutate, readWorkspace } = {}) {
   const elements = new Map();
   const document = { querySelector: (selector) => elements.get(selector), createElement: (tag) => new Element(tag) };
   class Element {
@@ -56,7 +57,7 @@ function makeHarness({ mutate } = {}) {
   const practice = { practice_id: "practice_test", practice_version: 1, timezone: "America/New_York", start_at: "2099-09-09T22:00:00Z", end_at: "2099-09-10T00:00:00Z", schedule_published_at: "2099-09-01T00:00:00Z", location: "Test Dock" };
   const state = {
     calls: [], requestCounter: 0, practiceReads: 0, failNextPracticeRead: false,
-    signupVersion: 1, signups: [],
+    signupVersion: 1, signups: [], season, practice,
     members: [{ member_id: "member_alice", display_name: "Alice", source_display_name: "Alice Source", display_name_override: "Alice", status: "ACTIVE", default_preference: "AMBIENT", member_version: 1, active_links: [] }]
   };
   const envelope = (data) => ({ data: structuredClone(data) });
@@ -77,6 +78,12 @@ function makeHarness({ mutate } = {}) {
       if (action === "coachBootstrap") return envelope({ panels: [], coach: { display_name: "Test Coach" }, session: { expires_at: "2099-12-31T00:00:00Z" }, default_season_id: season.season_id, seasons: [season] });
       if (action === "getSeasonManagement") return envelope({ season, is_default: true, members: state.members, templates: [], weeks: [{ week: { week_id: "week_test", status: "OPENED", week_start_date: "2099-09-07", week_version: 1 }, practices: [practice] }] });
       if (action === "listSeasonMembers") return envelope({ season_id: season.season_id, roster_version: season.roster_version, members: state.members });
+      if (action === "getMemberWorkspace") {
+        if (readWorkspace) await readWorkspace(state);
+        return envelope({ season_id: season.season_id, season, practices: [practice],
+        season_status: "OPEN", roster_version: season.roster_version, binding_version: 1,
+        members: state.members, member_links: {}, practice: (await this.get("practice")).data });
+      }
       if (action === "coachLogin") return envelope({ session_token: "session_new", session: { expires_at: "2099-12-31T00:00:00Z" } });
       if (action === "coachLogout") return envelope({});
       if (mutate) return mutate(state, action, payload, options, envelope);
@@ -92,14 +99,14 @@ function makeHarness({ mutate } = {}) {
     createRequestId: () => `request_${++state.requestCounter}`,
     loadCoachSession: () => ({ token: "session_old" }), saveCoachSession() {}, clearCoachSession() {},
     isCoachSessionError: (error) => ["SESSION_INVALID", "SESSION_EXPIRED", "SESSION_REVOKED"].includes(error?.code),
-    renderSignupList, signupResultText });
+    renderSignupList, signupResultText, validPracticeView, olderPracticeView });
   vm.runInContext(compiled, context);
   const element = (name) => {
     const found = elements.get(`[data-${name}]`);
     assert.ok(found, `Missing control ${name}`);
     return found;
   };
-  return { state, element, mutationCalls: () => state.calls.filter((call) => /signupByCoach|SignupByCoach|Member|createSeason/.test(call.action) && call.action !== "listSeasonMembers") };
+  return { state, element, mutationCalls: () => state.calls.filter((call) => /signupByCoach|SignupByCoach|Member|createSeason/.test(call.action) && !["listSeasonMembers", "getMemberWorkspace"].includes(call.action)) };
 }
 
 async function settled(predicate) {
@@ -111,6 +118,8 @@ async function settled(predicate) {
 }
 
 async function ready(harness) {
+  await settled(() => harness.element("season-picker").value === "season_test");
+  if (!harness.element("member-console-status").textContent.includes("名册与报名已更新")) await harness.element("open-members").emit("click");
   await settled(() => harness.element("member-console-status").textContent.includes("名册与报名已更新"));
 }
 
@@ -128,6 +137,51 @@ function acceptSignup(state, payload, envelope) {
   return envelope({ season_id: "season_test", practice_id: "practice_test", signup_version: state.signupVersion, signup, promoted_member_ids: [] });
 }
 
+test("Coach login loads only metadata until the selected workspace is opened", async () => {
+  const h = makeHarness();
+  await settled(() => h.element("season-picker").value === "season_test");
+  assert.deepEqual(h.state.calls.map(call => call.action), ["coachBootstrap"]);
+  assert.equal(h.state.practiceReads, 0);
+  await ready(h);
+  assert.deepEqual(h.state.calls.map(call => call.action), ["coachBootstrap", "getMemberWorkspace"]);
+});
+
+test("Coach commit view updates signup and links without another read", async () => {
+  const h = makeHarness({ mutate: (state, _action, payload, _options, envelope) => {
+    const result = acceptSignup(state, payload, envelope).data;
+    return envelope({ ...result, view_status: "ready", current_view: { season_id: state.season.season_id,
+      roster_version: 1, member_links: { member_alice: [{ practice_id: state.practice.practice_id }] },
+      practice: { season_id: state.season.season_id, practice: state.practice, roster_version: 1, binding_version: 1,
+        signup_version: state.signupVersion, signup_open: true, management_signup_open: true,
+        counts: { confirmed: 1, total_capacity: 20, left: 0, right: 0, ambient: 1, waitlisted: 0 }, signups: state.signups }
+    } });
+  } });
+  await submitSignup(h);
+  await settled(() => h.element("managed-signup-status").textContent.includes("操作已保存"));
+  assert.equal(h.state.practiceReads, 1);
+  assert.equal(h.state.calls.length, 3);
+  assert.equal(h.element("member-status-confirm").disabled, true, "new active link prevents deactivation");
+});
+
+test("slow Coach refresh preserves edits and a response after logout cannot restore private DOM", async () => {
+  let release, reads = 0;
+  const h = makeHarness({ readWorkspace: () => ++reads > 1 ? new Promise(resolve => { release = resolve; }) : undefined });
+  await ready(h);
+  const form = h.element("member-edit-form");
+  h.element("member-refresh").emit("click");
+  assert.equal(h.element("member-picker").disabled, false);
+  form.elements.namedItem("display_name_override").value = "Unsaved change";
+  release();
+  await settled(() => !h.element("member-refresh").disabled);
+  assert.equal(form.elements.namedItem("display_name_override").value, "Unsaved change");
+  h.element("member-refresh").emit("click");
+  await h.element("logout-button").emit("click");
+  release();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element("member-picker").children.length, 0);
+  assert.equal(h.element("member-source").textContent, "");
+});
+
 test("uncertain Coach signup freezes the original payload and request ID until retry", async () => {
   let writes = 0;
   const harness = makeHarness({ mutate: (state, _action, payload, _options, envelope) => {
@@ -140,7 +194,7 @@ test("uncertain Coach signup freezes the original payload and request ID until r
   assert.equal(harness.element("member-picker").disabled, true);
   harness.element("managed-signup-form").elements.namedItem("preference").value = "RIGHT";
   harness.element("managed-signup-retry").emit("click");
-  await settled(() => harness.element("managed-signup-status").textContent.includes("清单已从服务器重新读取"));
+  await settled(() => harness.element("managed-signup-status").textContent.includes("清单已按服务器当前视图更新"));
   assert.equal(writes, 2);
   assert.deepEqual(harness.mutationCalls()[0], harness.mutationCalls()[1]);
   assert.equal(harness.element("managed-signup-fields").disabled, false);
@@ -158,7 +212,7 @@ test("accepted Coach write with failed readback stays locked and retry only rere
   assert.equal(harness.element("managed-signup-fields").disabled, true);
   assert.equal(harness.element("managed-signup-retry").textContent, "重新读取已保存结果");
   harness.element("managed-signup-retry").emit("click");
-  await settled(() => harness.element("managed-signup-status").textContent.includes("清单已从服务器重新读取"));
+  await settled(() => harness.element("managed-signup-status").textContent.includes("清单已按服务器当前视图更新"));
   assert.equal(writes, 1);
   assert.equal(harness.state.practiceReads, 3);
   assert.equal(harness.element("managed-signup-retry").hidden, true);
@@ -172,7 +226,7 @@ test("Coach result uses the reread signup state when a later change superseded t
     return accepted;
   } });
   await submitSignup(harness);
-  await settled(() => harness.element("managed-signup-status").textContent.includes("清单已从服务器重新读取"));
+  await settled(() => harness.element("managed-signup-status").textContent.includes("清单已按服务器当前视图更新"));
   assert.match(harness.element("managed-signup-status").textContent, /当前状态：报名已取消/);
   assert.doesNotMatch(harness.element("managed-signup-status").textContent, /已确认 Ambient/);
 });
@@ -193,7 +247,7 @@ test("expired Coach session clears private DOM and resumes the same request with
   await settled(() => harness.element("managed-signup-status").textContent.includes("会话已恢复"));
   assert.equal(harness.element("managed-signup-fields").disabled, true);
   harness.element("managed-signup-retry").emit("click");
-  await settled(() => harness.element("managed-signup-status").textContent.includes("清单已从服务器重新读取"));
+  await settled(() => harness.element("managed-signup-status").textContent.includes("清单已按服务器当前视图更新"));
   const [first, second] = harness.mutationCalls();
   assert.equal(first.payload.session_token, "session_old");
   assert.equal(second.payload.session_token, "session_new");
