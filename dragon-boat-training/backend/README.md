@@ -1,6 +1,6 @@
 # Apps Script 后端
 
-当前代码覆盖已真实验收的 P0／P1 核心和 P2 报名与维护。P2 包含普通及管理报名、候补、换侧、取消、队员改名与启停、版本保护和中断恢复。P1 剩余工作见[Epic 总览](../epics/README.md)；角色、排座及归档分别留到 P3／P4。
+当前代码覆盖 P0／P1 核心、P2 报名与维护及 P2.1 等待体验优化，部署和实测状态见[当前进度](../CURRENT-STATUS.md)。P2 包含普通及管理报名、候补、换侧、取消、队员改名与启停、版本保护和中断恢复。P2.1 在可靠提交后按需附带当前视图，并提供受保护的合并工作区读取。P1 剩余工作见[Epic 总览](../epics/README.md)；角色、排座及归档分别留到 P3／P4。
 
 ## 代码与数据
 
@@ -54,3 +54,5 @@ P2 沿用 P1 表头，以 `Settings` 保存每场报名版本与入队序号，�
 当前部署版本、测试数量、真实 Google／Pages 验收证据与接续位置统一记录在[当前进度](../CURRENT-STATUS.md)，不以本地测试或部署成功代替验收。
 
 [live-p2-acceptance.mjs](../tests/live-p2-acceptance.mjs) 是显式手动集成脚本，不随 `npm test` 执行。设置运行时环境变量 `DBT_API_URL` 后，从仓库根目录运行 `node dragon-boat-training/tests/live-p2-acceptance.mjs --write-test-data`；仅在隔离测试赛季、约定的虚构队员及初始空报名场次通过检查后写入。清理只取消本次运行创建、且 `queue_at` 与 `queue_sequence` 仍匹配的报名；不清空其他报名、不删除成员或审计，归属变化时停止并人工核对。脚本、文档及测试结果不得包含真实私有文件 ID 或凭据。
+
+[live-p21-timing.mjs](../tests/live-p21-timing.mjs) 对同一测试赛季首场及固定虚构队员执行两轮报名、换侧、取消，再改名并恢复、退出。仅通过运行时环境设置 `DBT_API_URL`、`DBT_COACH_CODE`，显式传入 `--write-test-data`；`--optimized` 使用当前视图及合并读取，默认模式模拟原请求链。可用 `DBT_TIMING_REPORT` 将去除身份信息的报告写入被忽略的 `.build/`。报告测量 API 请求链耗时、次数和响应字节数，不等同于浏览器渲染耗时或锁占用时间。失败会记录清理未完成，必须核对原请求与测试队员状态，不能直接重新整轮运行或清空表格。

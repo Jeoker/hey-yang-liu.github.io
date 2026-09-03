@@ -488,6 +488,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
 
   async function refreshBootstrap(preferredSeasonId = "") {
     if (!client || !sessionToken) return;
+    setStatus(managementStatus, "正在读取赛季入口……", "pending");
     const token = sessionToken;
     const response = await client.post("coachBootstrap", { session_token: token });
     if (token !== sessionToken) return;
