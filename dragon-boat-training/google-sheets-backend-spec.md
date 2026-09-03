@@ -1,6 +1,6 @@
 # Google Sheets 后端规格
 
-产品规则和待定事项以 [项目说明](README.md) 为准；页面行为见 [前端规格](frontend-spec.md)。本文定义服务端实现约束；P0 已完成真实部署验收，P1 核心已有本地自动化验证，真实 Google 与 Pages 结果仍以[当前进度](CURRENT-STATUS.md)和部署章节为准。
+产品规则和待定事项以 [项目说明](README.md) 为准；页面行为见 [前端规格](frontend-spec.md)。P0／P1 核心及 P2 报名与维护已实现并部署。本文包含完整目标规格，排座、角色和归档留到 P3／P4；当前验证证据以[当前进度](CURRENT-STATUS.md)为准。
 
 ## 架构与存储
 
@@ -26,7 +26,7 @@ GitHub Pages 通过单一数据模块访问 Apps Script Web App 的 `doGet`／`d
 | `SystemSettings` | `default_season_id` 为空或指向已就绪且未到结束边界的开放赛季；系统配置版本用于默认值等并发修改 |
 | `Coaches` | `coach_id`、显示姓名、随机 Code 的服务端校验摘要、`credential_version`、启停状态；不设角色等级列 |
 | `CoachSessions` | 会话校验摘要、`coach_id`、签发时凭据版本、签发及到期时间、撤销状态 |
-| `SystemRequests` | 系统范围写入的请求键、操作者、动作、`request_id`、参数摘要、处理阶段、可恢复结果及完成时间；不保存明文 Code 或会话令牌 |
+| `SystemRequests` | 写入请求键、操作者范围、动作、`request_id`、参数摘要、处理阶段、分别保存的确定计划与结果、完成时间；不保存明文 Code 或会话令牌 |
 
 `form_id` 与公开填写 URL 分别保存，不混用其标识；响应 Tab 使用稳定 ID。绑定版本与名单版本独立。`coach_id` 识别管理操作者，与某季 `member_id`、某次训练的 Coach 角色分别建模。
 
@@ -77,7 +77,7 @@ GitHub Pages 通过单一数据模块访问 Apps Script Web App 的 `doGet`／`d
 | 周排期维护 | `updateScheduleTemplates`、`updateTrainingWeek`、`confirmTrainingWeek`、`publishTrainingWeek` | 维护模板、当周草稿和开放时间；首次整周发布核对管理确认及到点条件，确认时已到点可随即发布，否则定时执行 |
 | 训练维护 | `createPractice`、`updatePractice`、`cancelPractice` | 增补或修改日程、移除单次安排；已公开训练保留取消记录，返回影响预览与最新数据 |
 | 增补发布 | `publishAdditionalPractice` | 在已开放周由管理人员确认并立即发布指定新增场次；仅追加该场次，不重发整周或公开其他草稿 |
-| 管理报名 | `updateSignupByCoach`、`cancelSignupByCoach` | 训练结束前可用同一管理会话代改或取消报名，不受普通报名截止限制；结束后不再修改报名或触发递补 |
+| 管理报名 | `signupByCoach`、`updateSignupByCoach`、`cancelSignupByCoach` | 训练结束前可用同一管理会话代报名、代改或取消，不受普通报名截止限制；结束后不再修改报名或触发递补 |
 | 队员维护 | `updateMember`、`restoreMemberName`、`setMemberStatus` | 按稳定 ID 修改资料并返回新版本 |
 | 排座维护 | `saveCoachDraft`、`assignSeat`、`removeFromSeat`、`setCoachAndSteerer`、`publishSeatPlan`、`undoCoachAction` | 草稿、角色、正式 revision 及撤销事件 |
 | 同步恢复 | `retrySeasonSync` | 受控重试失败导入，不绕过绑定检查或去重 |
@@ -100,9 +100,15 @@ Code 仅人工交付时使用明文，服务端保存校验摘要，浏览器会
 
 Google Sheets 不提供跨表数据库事务。使用可恢复阶段和批量写入，不能暴露半个排座版本；故障恢复期间不把不一致数据标为最新。长导入分批持久化检查点，不跨请求一直持锁。训练取消及最终座位更正同样受此协议约束；冻结后的更正仅追加说明，不覆盖快照。
 
-P2 在修改前将确定的变更行、排队时间、递补结果、目标版本和响应分别存入 `SystemRequests.result_json` 的 `plan` 与 `result`，记录类型为 `P2`，请求键的操作者范围包含赛季。完成请求只返回 `result`；未完成请求按原计划恢复，不再次判断当时的余位或生成新的排队时间。赛季内的报名、成员读取及写入、名单同步在锁内先恢复未完成的 P2 操作；恢复失败返回可重试错误，不公开部分完成结果。赛季审计事件使用确定 ID，恢复不重复追加。
+P2 在修改前将确定的变更行、排队时间、递补结果、目标版本和响应分别存入 `SystemRequests.result_json` 的 `plan` 与 `result`，记录类型为 `P2`，请求键的操作者范围包含赛季。完成请求只返回 `result`，不因后来截止、停用或版本变化重新执行；管理重放仍须有效会话。未完成请求按原计划恢复，不重新生成队列。进入脚本锁后的业务读取和写入先恢复未完成的 P2 操作，包括 P1 管理写入及名单同步；恢复失败返回可重试错误。恢复赛季数据只更新本次目标字段，不用旧整行覆盖后来配置；审计使用确定 ID，恢复不重复追加。
 
-每场报名的 `signup_version` 和单调递增入队序号保存在现有 `Settings` 的 `signup:<practice_id>` 项，不更改已部署 P1 表头。报名写入同时携带读取时的 `practice_version` 与 `signup_version`，陈旧操作先刷新并重新确认。浏览器写入等待 30 秒；结果未知时保留原请求编号及完整参数，暂停新的修改，沿用原请求重试。成功响应后重新读取当前训练，区分原操作结果和后来发生的变更。
+P2 持锁提交顺序为：保存完整计划并 `SpreadsheetApp.flush()` → 写业务行及审计并 `flush()` → 写 `COMPLETED` 并 `flush()` → 释放锁。释放前仍保证刷新缓冲；任何 `flush` 失败都不能返回成功，异常路径也须释放锁。这个顺序确保恢复依据先于业务持久化，完成标记晚于业务持久化，缓冲写入不会越过锁边界。
+
+同次最外层脚本锁内复用 Spreadsheet／Sheet 句柄和已读记录，避免重复远程读取。记录读取返回副本，写入后使对应表的记录缓存失效；进入与退出锁时清空请求内缓存，异常路径也不例外。这些缓存不跨请求复用，与十分钟公开名单缓存分开。
+
+每场报名的 `signup_version` 和单调递增入队序号保存在现有 `Settings` 的 `signup:<practice_id>` 项，不更改已部署 P1 表头。报名写入同时携带读取时的 `practice_version` 与 `signup_version`，陈旧操作先刷新并重新确认。公开页面的读取、写入与 Coach 客户端均等待最多 30 秒；结果未知时保留原请求编号及完整参数，暂停新的修改，沿用原请求重试。成功响应后重新读取当前训练，区分原操作结果和后来发生的变更。
+
+P2 不建立 Coach／Steerer 角色或排位存储，确认名额仅按报名容量计算。若本次训练的 `SeatPlanCurrent` 已有成员，报名修改返回 `SEAT_PLAN_REQUIRES_P3`；不能清除船位或绕过保护。P3 必须以以下联动规则及角色资格检查替换该保护，届时停用关联检查也须覆盖带队角色。
 
 容量判断采用项目报名规则；允许的取消或偏好修改、从草稿及公开船位移除、候补递补和相应版本更新在同次锁内完成。按服务器记录的 `(queue_at, queue_sequence)` 升序扫描符合当前空缺的候补，跳过当前不能合法补位的人；保留时间的修改者也使用此排序，不抢占已确认名额。已有公开船位时按公开空位侧向检查，否则按草稿空位检查；尚未排座则按确认人数与偏好容量判断可安排性。
 
@@ -151,6 +157,8 @@ P2 在修改前将确定的变更行、排队时间、递补结果、目标版�
 
 后台按赛季时区从启用模板生成周排期草稿，并与手动增补场次一起管理。用 `(season_id, week_id, template_id)` 标识默认实例；重复任务恢复已有进度，不覆盖人工时间地点调整。移除的默认实例保留生成标记，避免下次扫描重新出现；默认模板与具体训练分开存储。
 
+当前 `updateTrainingWeek` 在首行写入前持久化 `TRAINING_WEEK_PLAN_V1` 完整实例计划，`plan` 与 `result` 分离。中断重试只补齐原计划缺失实例，不读取新模板重算、不覆盖已调整或取消记录；已有结果只重放结果，不重建删除项。旧未完成请求若已有周却无可恢复计划，返回 `RECOVERY_REQUIRED`，不猜测原计划或报告空周成功。该路径已有故障注入回归，不代表其他 P1 写入路径的中断恢复全部完成。
+
 公开页面只读取已完成发布的场次集合。首次整周确认记录当前 `week_version`、操作者和时间；确认不跨周复用，编辑待开放版本后旧确认失效。首次发布在锁内检查有效管理确认、`confirmed_version == week_version`、开放时间及当前赛季状态；确认时已到点随即发起发布，否则由定时任务到点执行。定时任务不能自动替管理人员确认，也不能把仅保存的草稿公开。
 
 整周初次发布使用可恢复记录，所有场次就绪后再切换公开指针并记录各场次日程发布信息，不能只公开半周。发布失败或重试仍核对确认版本，不回退发布旧草稿；已完成首次发布的周不因再次执行任务而发布后续新增草稿。
@@ -161,11 +169,11 @@ P2 在修改前将确定的变更行、排队时间、递补结果、目标版�
 
 ## 十分钟名单缓存
 
-使用服务端共享 `ScriptCache`，键包含 `season_id`、`binding_version`、`roster_version`。快照只含公开成员字段及 `generated_at`、`expires_at`，正常有效期为 600 秒；浏览器沿用同一绝对到期时间。轻量版本元数据可放 Script Properties，与 `Seasons` 权威记录保持可恢复的一致性。
+使用服务端共享 `ScriptCache`，键包含 `season_id`、`binding_version`、`roster_version`。服务端快照保存姓名、默认偏好及有效标记，另含 `generated_at`、`expires_at`；公开选人接口只投影有效成员，训练详情可复用停用成员姓名。正常有效期为 600 秒，浏览器沿用同一绝对到期时间。
 
 1. 检查赛季可读、配置及当前版本；命中完整且未过期的快照时保持原时间返回。
-2. 未命中时获取脚本锁并再次检查，合并并发重建；只从本季 `Members` 生成有效名单，不读 Form 页面或扫描原始回答。
-3. 成功后写入快照及到期时间；拿不到锁短暂重试或返回可重试状态。超出缓存单项大小时分块并核对完整性，不截断名单。
+2. 在脚本锁内完成恢复及版本检查，再复用或重建快照；只读本季 `Members`，不读 Form 页面或扫描原始回答。
+3. 成功后写入快照及到期时间；拿不到锁返回可重试状态。快照过大或缓存写入失败时返回完整结果并跳过缓存，不截断名单。
 4. 表格读取失败不得缓存空结果或延长旧快照；合法空名单与故障分别返回。Google 缓存可提前清理，未命中按同一流程恢复。
 
 成员导入、改名、资格变更、绑定及赛季完成或归档使旧缓存失效。写入前标记更新中，完成后发布新版本；失效过程失败须能恢复，不能先返回成功而继续服务被当作最新的旧名单。缓存写入失败可在下一次重建，版本失效不能丢失；到期检查不依赖缓存是否已清除。
@@ -218,6 +226,6 @@ Tab 可命名为 `2026-Q3 2026-08-22 1000 p_ab12`，身份仍以完整赛季和�
 ## 官方参考
 
 - [Apps Script Web Apps](https://developers.google.com/apps-script/guides/web) · [Content Service](https://developers.google.com/apps-script/guides/content)
-- [Installable Triggers](https://developers.google.com/apps-script/guides/triggers/installable) · [Lock Service](https://developers.google.com/apps-script/reference/lock) · [Quotas](https://developers.google.com/apps-script/guides/services/quotas)
+- [Installable Triggers](https://developers.google.com/apps-script/guides/triggers/installable) · [锁释放与缓冲提交](https://developers.google.com/apps-script/reference/lock/lock#releaseLock()) · [Quotas](https://developers.google.com/apps-script/guides/services/quotas)
 - [Form 目标接口](https://developers.google.com/apps-script/reference/forms/form) · [响应 Tab 对应表单](https://developers.google.com/apps-script/reference/spreadsheet/sheet#getFormUrl())
 - [CacheService](https://developers.google.com/apps-script/reference/cache/cache-service) · [Cache](https://developers.google.com/apps-script/reference/cache/cache)

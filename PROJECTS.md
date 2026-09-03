@@ -4,7 +4,7 @@
 
 | 项目 | 状态 | 说明 | 文档 |
 |---|---|---|---|
-| Dragon Boat Training | P0 实现中 | 按赛季入队与训练报名、统一 Coach Mode、排座和历史荣誉墙 | [项目说明](dragon-boat-training/README.md) · [前端规格](dragon-boat-training/frontend-spec.md) · [后端规格](dragon-boat-training/google-sheets-backend-spec.md) · [Epic 规划](dragon-boat-training/epics/README.md) |
+| Dragon Boat Training | 分阶段开发，当前进度见接续入口 | 按赛季入队与训练报名、统一 Coach Mode、排座和历史荣誉墙 | [当前进度](dragon-boat-training/CURRENT-STATUS.md) · [项目说明](dragon-boat-training/README.md) · [前端规格](dragon-boat-training/frontend-spec.md) · [后端规格](dragon-boat-training/google-sheets-backend-spec.md) · [Epic 规划](dragon-boat-training/epics/README.md) |
 | Meowsformer | 已有实现，独立 Git 仓库 | 将人类语音转换为猫叫表达的应用，包含 Python 后端、Vue 网页和音频处理管线 | [开发概览](meowsformer/docs/development-overview.md) · [技术参考](meowsformer/docs/technical-reference.md) · [测试文档](meowsformer/docs/project-testing.md) · [GitHub 仓库](https://github.com/Jeoker/meowsformer) |
 
 ## 本地目录与仓库边界

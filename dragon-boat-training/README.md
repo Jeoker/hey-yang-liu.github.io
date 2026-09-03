@@ -1,6 +1,6 @@
 # Dragon Boat Training
 
-> 状态：设计已确认；P0 已完成。P1“建季并开放一周”的阶段范围已通过真实 Google／Pages 验收，下一阶段为 P2 报名与维护；各 Epic 中超出 P1 验收范围的工作仍按原工作包继续。
+> 状态：P0、P1“建季并开放一周”及 P2“报名与维护”的阶段范围已实现、部署并通过真实验收；P1 剩余工作及 P3／P4 仍按 Epic 继续。验证证据和接续位置见[当前进度](CURRENT-STATUS.md)。
 > 更新：2026-09-02
 
 为龙舟队提供按赛季入队、每周排期与训练报名、候补、排座和历史荣誉墙。网站部署于 GitHub Pages，业务由 Google Apps Script 处理，数据保存在 Google Sheets。

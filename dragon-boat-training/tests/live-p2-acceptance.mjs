@@ -128,5 +128,5 @@ for (const member of members) {
 await read();
 assert.equal(state.signups.filter((row) => ownedSignups.has(row.member_id)).length, 0);
 console.log(JSON.stringify({ ok: true, phase: "P2", fixture_members: members.length,
-  competing_writes: 2, final_confirmed: 0, final_waitlisted: 0,
+  competing_writes: 2, final_confirmed: state.counts.confirmed, final_waitlisted: state.counts.waitlisted,
   cleaned_up: "Only this run's active signups were cancelled; member and audit records retained." }));

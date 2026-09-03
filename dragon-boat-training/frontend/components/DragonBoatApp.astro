@@ -43,6 +43,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       </div>
       <p class="dragon-boat-status-message" data-service-message>正在连接 Apps Script……</p>
       <p class="dragon-boat-status-detail" data-service-detail hidden></p>
+      <button type="button" class="dragon-boat-secondary-button" data-page-retry hidden>重新读取训练计划</button>
     </section>
 
     <section class="dragon-boat-season-overview" data-season-overview hidden aria-labelledby="season-title">
@@ -150,6 +151,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const weekCards = root?.querySelector<HTMLElement>("[data-week-cards]");
   const weekEmpty = root?.querySelector<HTMLElement>("[data-week-empty]");
   const apiUrl = root?.getAttribute("data-api-url")?.trim() || "";
+  const pageRetry = root?.querySelector<HTMLButtonElement>("[data-page-retry]");
   const practicePanel = root?.querySelector<HTMLElement>("[data-practice-panel]");
   const practiceTitle = root?.querySelector<HTMLElement>("[data-practice-title]");
   const practiceMeta = root?.querySelector<HTMLElement>("[data-practice-meta]");
@@ -194,6 +196,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   };
 
   function showConnection(state: string, label: string, text: string, technical = "") {
+    if (pageRetry) pageRetry.hidden = state !== "error";
     if (!badge || !message || !detail) return;
     badge.dataset.state = state;
     badge.textContent = label;
@@ -638,5 +641,9 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     }
   }
 
+  pageRetry?.addEventListener("click", () => {
+    showConnection("pending", "正在重试", "正在重新读取训练计划……");
+    loadPage();
+  });
   loadPage();
 </script>
