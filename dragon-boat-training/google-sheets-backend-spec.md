@@ -1,6 +1,6 @@
 # Google Sheets 后端规格
 
-产品规则和待定事项以 [项目说明](README.md) 为准；页面行为见 [前端规格](frontend-spec.md)。P0／P1 核心及 P2 报名与维护已实现并部署。本文包含完整目标规格，排座、角色和归档留到 P3／P4；当前验证证据以[当前进度](CURRENT-STATUS.md)为准。
+产品规则和待定事项以 [项目说明](README.md) 为准；页面行为见 [前端规格](frontend-spec.md)。P0／P1 核心、P2 报名与维护、P2.1 及 P3 排座与最终更正已经实现，P3 后端部署到 Version 10，真实 Google API 写入与清理验收通过；Pages 双端浏览器验收尚未完成。本文同时保留 P1 剩余能力和 P4 归档／历史的目标规格，当前验证证据以[当前进度](CURRENT-STATUS.md)为准。
 
 ## 架构与存储
 
@@ -9,7 +9,7 @@ GitHub Pages 通过单一数据模块访问 Apps Script Web App 的 `doGet`／`d
 | 文件 | Tab 与职责 |
 |---|---|
 | 长期系统管理 Spreadsheet | `Seasons`：赛季与绑定；`SystemSettings`：默认赛季、配置版本、已连接文件目录；`Coaches`、`CoachSessions`：统一凭据与会话；`SystemRequests`：系统级写入去重与恢复；`SystemAuditLog`：系统事件；`PublicHistoryIndex`：历史发布目录 |
-| 每季独立运营 Spreadsheet | Form 原始响应 Tab；`Members`：队员；`ScheduleTemplates`、`TrainingWeeks`：默认模板与周排期；`Practices`：训练；`SignupsCurrent`：报名；`SeatPlanCurrent`：排座；`AuditLog`：赛季事件；`Settings`：本季配置；`ImportState`：同步进度；`Health`：运行状态 |
+| 每季独立运营 Spreadsheet | Form 原始响应 Tab；`Members`：队员；`ScheduleTemplates`、`TrainingWeeks`：默认模板与周排期；`Practices`：训练；`SignupsCurrent`：报名；`SeatPlanCurrent`、`SeatPlanState`：排座草稿及状态；`SeatPlanRevisions`：不可变正式版本；`PracticeFinalSnapshots`：到期冻结快照；`AuditLog`：赛季事件；`Settings`：本季配置；`ImportState`：同步进度；`Health`：运行状态 |
 | 年度归档 Spreadsheet | 每次完成训练一个 Tab，保存完整私有快照；取消训练的归档形式见 D3，年度文件的创建方式见 D4 |
 
 系统状态表与原始响应应保护，日常业务通过接口修改；Code 登记、重置、停用和 Google Form 配置由管理人员人工维护。系统管理表 ID 保存在服务端配置，所有文件保持私有。已连接文件目录仅提供候选项，不开放全 Drive 浏览或任意单元格写入。
@@ -39,9 +39,12 @@ GitHub Pages 通过单一数据模块访问 Apps Script Web App 的 `doGet`／`d
 | `Members` | `member_id`、`source_key`、原始响应引用、`source_display_name`、`display_name_override`、派生 `display_name`、`status`（`ACTIVE`／`INACTIVE`）、`default_preference`、`member_version`、创建及更新时间 |
 | `ScheduleTemplates` | `template_id`、星期、本地开始结束时间、时区、地点及地址、启停状态与模板版本；仅用于生成实例 |
 | `TrainingWeeks` | `week_id`、所属周及赛季时区、`scheduled_open_at`、草稿及公开场次集合、发布状态、`week_version`、`confirmed_version`、`confirmed_by`、`confirmed_at`、首次发布时间；整周确认只适用于首次开放的当前版本，之后新增草稿不影响已有公开场次 |
-| `Practices` | `practice_id`、`week_id`、可空模板引用、生成去重键、`start_at`、`end_at`、`timezone`、`location`、`address`、`map_url`、左右容量、`signup_cutoff_at`、Coach／Steerer 成员 ID、`practice_version`、修改人与时间、取消信息、日程发布信息 `schedule_published_at`／`schedule_published_by`、`published_revision`、`completed_snapshot_id`、`archive_due_at`、`archived_at` |
+| `Practices` | `practice_id`、`week_id`、可空模板引用、生成去重键、`start_at`、`end_at`、`timezone`、`location`、`address`、`map_url`、左右容量、`signup_cutoff_at`、`practice_version`、取消信息及日程发布信息 `schedule_published_at`／`schedule_published_by`；P3 的角色、正式版本和冻结指针保存在排座状态表，`archive_due_at` 由 `end_at + 24 小时` 推导；`completed_snapshot_id` 与 `archived_at` 由 BE-07 在 P4 接入 |
 | `SignupsCurrent` | `(season_id, practice_id, member_id)` 唯一；`preference` 为 `LEFT`／`AMBIENT`／`RIGHT`，`status` 为 `CONFIRMED`／`WAITLISTED`／`CANCELLED`；`queue_at` 与 `queue_sequence` 记录本次原始报名时间及服务器入队顺序，直接修改偏好均保留，取消后重新报名时重置；保留 `updated_at`、`last_request_id`，旧排队信息保存在事件中 |
-| `SeatPlanCurrent` | 每个训练的草稿座位为 `row_number`、`side`、`member_id`；另存训练级 `seat_plan_version`、修改人和时间。手动发布或系统取消、偏好修改、递补生成独立不可变 revision 快照，标记来源和时间，不能用未发布草稿覆盖公开内容 |
+| `SeatPlanCurrent` | 每个训练当前草稿的完整物理座位行：`row_number`、`side`、`member_id`、对应 `seat_plan_version`、修改人和时间 |
+| `SeatPlanState` | 每个训练一行，保存 `seat_plan_version`、Coach／Steerer 成员 ID、最新 `published_revision`、`frozen_revision`、冻结时间及最后修改信息 |
+| `SeatPlanRevisions` | 手动发布或系统取消、偏好修改、递补产生的不可变正式快照，包含来源、角色、座位、当时姓名、发布人、发布时间和请求编号；未发布草稿不能覆盖或混入正式版本 |
+| `PracticeFinalSnapshots` | 在精确 `archive_due_at` 边界冻结到期前最后正式 revision 的角色、座位及姓名；没有正式版本时保存明确的未发布结果，供 P4 归档读取 |
 
 休赛提示只在已激活且未到结束边界的赛季内，根据已发布且未结束的训练计算。周计划空缺不改变名单、绑定或结束日期；恢复发布或增加场次继续使用该 `season_id`。到结束边界后返回已完成状态，不能从缺少训练、缓存缺失或读取错误推断正式完成。
 
@@ -79,7 +82,7 @@ GitHub Pages 通过单一数据模块访问 Apps Script Web App 的 `doGet`／`d
 | 增补发布 | `publishAdditionalPractice` | 在已开放周由管理人员确认并立即发布指定新增场次；仅追加该场次，不重发整周或公开其他草稿 |
 | 管理报名 | `signupByCoach`、`updateSignupByCoach`、`cancelSignupByCoach` | 训练结束前可用同一管理会话代报名、代改或取消，不受普通报名截止限制；结束后不再修改报名或触发递补 |
 | 队员维护 | `updateMember`、`restoreMemberName`、`setMemberStatus` | 按稳定 ID 修改资料并返回新版本 |
-| 排座维护 | `saveCoachDraft`、`assignSeat`、`removeFromSeat`、`setCoachAndSteerer`、`publishSeatPlan`、`undoCoachAction` | 草稿、角色、正式 revision 及撤销事件 |
+| 排座维护 | `getSeatingWorkspace`、`saveSeatPlanDraft`、`publishSeatPlan` | 读取私有草稿与最新正式版；用完整快照保存移动、交换、角色设置及客户端撤销／重置结果；发布不可变手动 revision。`change_kind` 区分 `EDIT`、`UNDO`、`RESET_TO_PUBLISHED` |
 | 同步恢复 | `retrySeasonSync` | 受控重试失败导入，不绕过绑定检查或去重 |
 
 写入携带 `action`、`request_id`、实体 ID 及所需版本；新建 ID 由后端产生，无训练关联的操作不要求 `practice_id`。管理请求包括受保护读取均通过 POST 请求体携带 `session_token`，不放入 URL。返回服务器时间、操作结果及受影响的新版本；错误区分权限、归属、状态、版本冲突、配置与可重试故障。
@@ -100,15 +103,15 @@ Code 仅人工交付时使用明文，服务端保存校验摘要，浏览器会
 
 Google Sheets 不提供跨表数据库事务。使用可恢复阶段和批量写入，不能暴露半个排座版本；故障恢复期间不把不一致数据标为最新。长导入分批持久化检查点，不跨请求一直持锁。训练取消及最终座位更正同样受此协议约束；冻结后的更正仅追加说明，不覆盖快照。
 
-P2 在修改前将确定的变更行、排队时间、递补结果、目标版本和响应分别存入 `SystemRequests.result_json` 的 `plan` 与 `result`，记录类型为 `P2`，请求键的操作者范围包含赛季。完成请求只返回 `result`，不因后来截止、停用或版本变化重新执行；管理重放仍须有效会话。未完成请求按原计划恢复，不重新生成队列。进入脚本锁后的业务读取和写入先恢复未完成的 P2 操作，包括 P1 管理写入及名单同步；恢复失败返回可重试错误。恢复赛季数据只更新本次目标字段，不用旧整行覆盖后来配置；审计使用确定 ID，恢复不重复追加。
+报名与排座在修改前将确定的变更行、排队时间、递补或 revision 结果、目标版本和响应分别存入 `SystemRequests.result_json` 的 `plan` 与 `result`；既有报名动作保留 `P2` 请求范围，排座动作使用 `P3` 请求范围，两者都包含赛季和操作者。完成请求只返回原 `result`，不因后来截止、停用或版本变化重新执行；管理重放仍须有效会话。未完成请求按原计划恢复，不重新生成队列、递补或 revision。进入脚本锁后的业务读取和写入先恢复适用的未完成操作，包括 P1 管理写入及名单同步；恢复失败返回可重试错误。恢复赛季数据只更新本次目标字段，不用旧整行覆盖后来配置；审计使用确定 ID，恢复不重复追加。
 
-P2 持锁提交顺序为：保存完整计划并 `SpreadsheetApp.flush()` → 写业务行及审计并 `flush()` → 写 `COMPLETED` 并 `flush()` → 释放锁。释放前仍保证刷新缓冲；任何 `flush` 失败都不能返回成功，异常路径也须释放锁。这个顺序确保恢复依据先于业务持久化，完成标记晚于业务持久化，缓冲写入不会越过锁边界。
+报名与排座的持锁提交顺序为：保存完整计划并 `SpreadsheetApp.flush()` → 写业务行及审计并 `flush()` → 写 `COMPLETED` 并 `flush()` → 释放锁。释放前仍保证刷新缓冲；任何 `flush` 失败都不能返回成功，异常路径也须释放锁。这个顺序确保恢复依据先于业务持久化，完成标记晚于业务持久化，缓冲写入不会越过锁边界。
 
 同次最外层脚本锁内复用 Spreadsheet／Sheet 句柄和已读记录，避免重复远程读取。记录读取返回副本，写入后使对应表的记录缓存失效；进入与退出锁时清空请求内缓存，异常路径也不例外。这些缓存不跨请求复用，与十分钟公开名单缓存分开。
 
 每场报名的 `signup_version` 和单调递增入队序号保存在现有 `Settings` 的 `signup:<practice_id>` 项，不更改已部署 P1 表头。报名写入同时携带读取时的 `practice_version` 与 `signup_version`，陈旧操作先刷新并重新确认。公开页面与 Coach 客户端的单次请求超时上限为 30 秒，不是整个操作的总时限；结果未知时保留原请求编号及完整参数，暂停有冲突的后续提交，沿用原请求重试。操作结果与后来发生的变更分开表达；当前视图由提交响应或必要补读提供，P2.1 优化约束见下节。
 
-P2 不建立 Coach／Steerer 角色或排位存储，确认名额仅按报名容量计算。若本次训练的 `SeatPlanCurrent` 已有成员，报名修改返回 `SEAT_PLAN_REQUIRES_P3`；不能清除船位或绕过保护。P3 必须以以下联动规则及角色资格检查替换该保护，届时停用关联检查也须覆盖带队角色。
+确认名额继续由唯一报名分配逻辑按容量和排队顺序计算。P3 在同一持锁、可恢复写入内同步报名当前状态、草稿船位及必要的系统正式 revision，并在报名和队员维护路径检查 Coach／Steerer 角色冲突；停用关联检查同时覆盖报名、船位及带队角色。
 
 容量判断采用项目报名规则；允许的取消或偏好修改、从草稿及公开船位移除、候补递补和相应版本更新在同次锁内完成。按服务器记录的 `(queue_at, queue_sequence)` 升序扫描符合当前空缺的候补，跳过当前不能合法补位的人；保留时间的修改者也使用此排序，不抢占已确认名额。已有公开船位时按公开空位侧向检查，否则按草稿空位检查；尚未排座则按确认人数与偏好容量判断可安排性。
 

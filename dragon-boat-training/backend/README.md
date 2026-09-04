@@ -1,6 +1,6 @@
 # Apps Script 后端
 
-当前代码覆盖 P0／P1 核心、P2 报名与维护及 P2.1 等待体验优化，部署和实测状态见[当前进度](../CURRENT-STATUS.md)。P2 包含普通及管理报名、候补、换侧、取消、队员改名与启停、版本保护和中断恢复。P2.1 在可靠提交后按需附带当前视图，并提供受保护的合并工作区读取。P1 剩余工作见[Epic 总览](../epics/README.md)；角色、排座及归档分别留到 P3／P4。
+当前代码覆盖 P0／P1 核心、P2 报名与维护、P2.1 等待体验优化及 P3 排座与最终更正。P3 已部署到 Apps Script Version 10，线上 health 为服务 `0.6.0-p3`、契约 `2026-09-02.p2.1`；真实 Google API 写入验收及安全清理通过，Pages 双端浏览器验收尚未完成，状态见[当前进度](../CURRENT-STATUS.md)。P1 剩余工作与 P4 归档及历史范围见[Epic 总览](../epics/README.md)。
 
 ## 代码与数据
 
@@ -8,12 +8,13 @@
 - `src/CoachActions.gs`：登录、会话读取、测试写入和退出。
 - `src/Security.gs`：HMAC 摘要、签名令牌、限流和脚本锁。
 - `src/SystemStore.gs`：系统 Spreadsheet 表结构、请求去重、恢复记录和审计日志。
-- `src/SeasonStore.gs`：赛季与每季 Spreadsheet 的受控记录访问和版本检查。
+- `src/SeasonStore.gs`：赛季与每季 Spreadsheet 的受控记录访问、版本检查及旧赛季 P3 Tab 的按需建立。
 - `src/SeasonActions.gs`：建季、绑定检查、初始化、成员导入和 Form 提交同步。
-- `src/ScheduleActions.gs`：默认模板、周草稿、整周发布、预约发布与加场分层发布。
+- `src/ScheduleActions.gs`：默认模板、周草稿、整周发布、预约发布、加场分层发布及到期冻结扫描。
 - `src/PublicActions.gs`：公开赛季、已发布训练、管理详情和十分钟名单投影。
-- `src/SignupActions.gs`：报名、候补、训练详情及 P2 写入计划与恢复。
-- `src/MemberActions.gs`：受保护名册、资料修正、默认偏好、启停与关联检查。
+- `src/SignupActions.gs`：报名、候补、训练详情，以及报名变化与草稿／正式系统 revision 的同次可恢复写入。
+- `src/MemberActions.gs`：受保护名册、资料修正、默认偏好、启停、角色和船位关联检查，以及完成赛季最终更正所需读取。
+- `src/SeatingActions.gs`：排座工作区、完整草稿快照、角色、手动／系统 revision、最终更正及精确冻结快照。
 - `src/TimeUtils.gs`：赛季时区、日历边界及本地训练时间解析。
 - `src/Setup.gs`：一次性初始化及新增／重置个人 Coach Code。
 - `src/appsscript.json`：V8 运行时配置。
@@ -21,9 +22,9 @@
 - `build.mjs`：按固定顺序生成可直接粘贴到网页编辑器的单文件构建结果；运行根目录 `npm run build:dragon-boat-backend`。
 - `../contracts/api-v1.json`：当前请求和响应契约。
 
-长期系统 Spreadsheet 包含 `Coaches`、`CoachSessions`、`SystemRequests`、`SystemAuditLog`、`Seasons` 和 `SystemSettings`。每季响应 Spreadsheet 在初始化时增加 `Members`、模板、周、训练及后续业务所需系统 Tab。Code 使用随机 salt 和服务端 secret 生成摘要；短期会话令牌带服务端签名，Sheet 只保存令牌摘要。重置 Code 会推进 `credential_version`，停用凭据或版本变化会让旧会话立即失效。
+长期系统 Spreadsheet 包含 `Coaches`、`CoachSessions`、`SystemRequests`、`SystemAuditLog`、`Seasons` 和 `SystemSettings`。每季响应 Spreadsheet 包含名单、排期、训练及报名表，并使用 `SeatPlanCurrent` 保存当前草稿座位、`SeatPlanState` 保存角色和版本指针、`SeatPlanRevisions` 保存不可变正式版本、`PracticeFinalSnapshots` 保存到期冻结快照；既有赛季在首次使用 P3 能力时按需建立新增 Tab。Code 使用随机 salt 和服务端 secret 生成摘要；短期会话令牌带服务端签名，Sheet 只保存令牌摘要。重置 Code 会推进 `credential_version`，停用凭据或版本变化会让旧会话立即失效。
 
-P2 沿用 P1 表头，以 `Settings` 保存每场报名版本与入队序号，以 `SystemRequests` 分别保存确定计划及结果；提交顺序和恢复约束见[后端规格](../google-sheets-backend-spec.md#会话与写入一致性)。当前不建立角色或排位存储；已有船位时返回 `SEAT_PLAN_REQUIRES_P3`，不能绕过该保护继续改报名。
+报名与排座沿用同一 `Settings` 报名版本、服务器入队顺序和 `SystemRequests` 恢复协议。取消、换侧和自动递补在一次持锁事务中同步报名、草稿及必要的系统正式 revision；未发布草稿不会混入公开版本。提交顺序和恢复约束见[后端规格](../google-sheets-backend-spec.md#会话与写入一致性)。
 
 ## 第一次测试部署
 
@@ -49,10 +50,12 @@ P2 沿用 P1 表头，以 `Settings` 保存每场报名版本与入队序号，�
 
 ## 验证边界
 
-根目录 `npm test` 覆盖 P0／P1 基线、P2 业务边界、未知结果重试、写后故障恢复、持锁 `flush` 顺序及请求内缓存隔离。周生成的计划恢复已有专项回归，其他 P1 写入路径不能据此视为已通过全部中断测试。
+根目录 `npm test` 当前为 115／115，覆盖 P0／P1 基线、P2 业务边界、未知结果重试、写后故障恢复、持锁 `flush` 顺序、请求内缓存隔离，以及 P3 草稿隔离、角色互斥、手动与系统 revision、报名联动、版本冲突、最终更正和精确冻结边界。周生成的计划恢复已有专项回归，其他 P1 写入路径不能据此视为已通过全部中断测试。
 
 当前部署版本、测试数量、真实 Google／Pages 验收证据与接续位置统一记录在[当前进度](../CURRENT-STATUS.md)，不以本地测试或部署成功代替验收。
 
 [live-p2-acceptance.mjs](../tests/live-p2-acceptance.mjs) 是显式手动集成脚本，不随 `npm test` 执行。设置运行时环境变量 `DBT_API_URL` 后，从仓库根目录运行 `node dragon-boat-training/tests/live-p2-acceptance.mjs --write-test-data`；仅在隔离测试赛季、约定的虚构队员及初始空报名场次通过检查后写入。清理只取消本次运行创建、且 `queue_at` 与 `queue_sequence` 仍匹配的报名；不清空其他报名、不删除成员或审计，归属变化时停止并人工核对。脚本、文档及测试结果不得包含真实私有文件 ID 或凭据。
 
 [live-p21-timing.mjs](../tests/live-p21-timing.mjs) 对同一测试赛季首场及固定虚构队员执行两轮报名、换侧、取消，再改名并恢复、退出。仅通过运行时环境设置 `DBT_API_URL`、`DBT_COACH_CODE`，显式传入 `--write-test-data`；`--optimized` 使用当前视图及合并读取，默认模式模拟原请求链。可用 `DBT_TIMING_REPORT` 将去除身份信息的报告写入被忽略的 `.build/`。报告测量 API 请求链耗时、次数和响应字节数，不等同于浏览器渲染耗时或锁占用时间。失败会记录清理未完成，必须核对原请求与测试队员状态，不能直接重新整轮运行或清空表格。
+
+[live-p3-acceptance.mjs](../tests/live-p3-acceptance.mjs) 只允许文档约定的隔离测试赛季、22 名虚构成员、三场已发布训练及初始空报名、空角色、空正式座位和空草稿状态。运行同时要求 `DBT_API_URL`、`DBT_COACH_CODE` 及 `--write-test-data`，验证草稿隔离、角色互斥、错侧确认、手动／系统 revision、取消递补和换侧清位。每次重试复用原 `request_id` 和完整参数；若无法确认写入结果或测试数据归属发生变化，立即停止自动清理并要求人工核对。2026-09-04 的 Version 10 真实运行以退出码 0 完成，最终返回 `ok=true`；本轮有效报名全部取消，空角色和空座位正式版已发布，会话已撤销，完整边界见 [P3 验收报告](../tests/P3-ACCEPTANCE.md)。
