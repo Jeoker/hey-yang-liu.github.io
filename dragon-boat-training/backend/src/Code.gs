@@ -40,6 +40,12 @@ function handleDragonBoatRequest_(method, event) {
         return dragonBoatSuccess_(listSeasonMembers_(request), requestId);
       case "getMemberWorkspace":
         return dragonBoatSuccess_(getMemberWorkspace_(request), requestId);
+      case "getSeatingWorkspace":
+        return dragonBoatSuccess_(getSeatingWorkspace_(request), requestId);
+      case "saveSeatPlanDraft":
+        return dragonBoatSuccess_(saveSeatPlanDraft_(request), requestId);
+      case "publishSeatPlan":
+        return dragonBoatSuccess_(publishSeatPlan_(request), requestId);
       case "updateMember":
       case "restoreMemberName":
       case "setMemberStatus":

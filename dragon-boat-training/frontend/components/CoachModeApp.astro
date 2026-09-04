@@ -3,6 +3,8 @@ import logoUrl from "../../assets/team-logo-placeholder.svg";
 import "../styles/app.css";
 import "../styles/member-management.css";
 import "../styles/signup.css";
+import "../styles/seat-plan.css";
+import "../styles/seat-plan-admin.css";
 
 const basePath = import.meta.env.BASE_URL.endsWith("/")
   ? import.meta.env.BASE_URL
@@ -78,7 +80,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
           <label for="season-picker">当前查看</label>
           <select id="season-picker" data-season-picker></select>
           <button type="button" class="dragon-boat-secondary-button" data-open-season>打开赛季与排期</button>
-          <button type="button" class="dragon-boat-secondary-button" data-open-members>打开队员与报名</button>
+          <button type="button" class="dragon-boat-secondary-button" data-open-members>打开队员、报名与排座</button>
         </div>
 
         <details class="dragon-boat-management-block" data-create-season-details>
@@ -233,6 +235,47 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
           <p class="dragon-boat-form-status" data-managed-signup-status aria-live="polite"></p>
           <button type="button" class="dragon-boat-secondary-button" data-managed-signup-retry hidden>按原内容重试并确认结果</button>
         </section>
+
+        <section class="dragon-boat-management-block dragon-boat-seat-editor" data-seat-console hidden aria-labelledby="seat-management-title">
+          <div class="dragon-boat-section-heading">
+            <div>
+              <p class="dragon-boat-session-label">私有草稿与正式版本</p>
+              <h3 id="seat-management-title">本次训练排座</h3>
+            </div>
+            <button type="button" class="dragon-boat-secondary-button" data-seat-refresh>刷新排座</button>
+          </div>
+          <p data-seat-mode></p>
+          <p class="dragon-boat-form-status" data-seat-status aria-live="polite"></p>
+          <div class="dragon-boat-seat-role-grid">
+            <label>Coach<select data-seat-coach></select></label>
+            <label>Steerer<select data-seat-steerer></select></label>
+          </div>
+          <div class="dragon-boat-seat-editor-layout">
+            <section class="dragon-boat-seat-pool" aria-labelledby="seat-pool-title">
+              <h4 id="seat-pool-title">待排座池</h4>
+              <p>先点姓名，再点一个左／右船位。再次点船位可选择其中队员；可交换或移回池。</p>
+              <div data-seat-pool></div>
+              <button type="button" class="dragon-boat-secondary-button" data-seat-remove disabled>将所选队员移回池</button>
+            </section>
+            <section class="dragon-boat-seat-draft" aria-labelledby="seat-draft-title">
+              <h4 id="seat-draft-title">Coach 私有草稿</h4>
+              <p>每次调整会自动保存。公开页面只显示最近正式发布版本。</p>
+              <div class="dragon-boat-seat-draft-boat" data-seat-draft-grid></div>
+            </section>
+            <section class="dragon-boat-seat-published" aria-labelledby="seat-published-title">
+              <h4 id="seat-published-title">队员当前可见版本</h4>
+              <div data-seat-published></div>
+            </section>
+          </div>
+          <p class="dragon-boat-change-preview" data-seat-warnings></p>
+          <div class="dragon-boat-button-row">
+            <button type="button" class="dragon-boat-secondary-button" data-seat-undo disabled>撤销本地上一步</button>
+            <button type="button" class="dragon-boat-secondary-button" data-seat-reset disabled>从正式版重置草稿</button>
+            <button type="button" class="dragon-boat-secondary-button" data-seat-save disabled>立即保存草稿</button>
+            <button type="button" class="dragon-boat-primary-button" data-seat-publish disabled>发布正式座位表</button>
+          </div>
+          <button type="button" class="dragon-boat-secondary-button" data-seat-retry hidden>按原草稿重试并确认结果</button>
+        </section>
       </section>
 
       <details class="dragon-boat-connectivity-panel">
@@ -252,6 +295,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   import { clearCoachSession, isCoachSessionError, loadCoachSession, saveCoachSession } from "../lib/coach-session.js";
   import { renderSignupList, signupResultText } from "../lib/signup-view.js";
   import { validPracticeView, olderPracticeView } from "../lib/current-view.js";
+  import { renderSeatPlan } from "../lib/seat-plan-view.js";
 
   const root = document.querySelector<HTMLElement>("[data-coach-mode-app]");
   const q = <T extends HTMLElement>(selector: string) => root?.querySelector<T>(selector) || null;
@@ -333,6 +377,22 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const managedSignupCancel = q<HTMLButtonElement>("[data-managed-signup-cancel]");
   const managedSignupStatus = q<HTMLElement>("[data-managed-signup-status]");
   const managedSignupRetry = q<HTMLButtonElement>("[data-managed-signup-retry]");
+  const seatConsole = q<HTMLElement>("[data-seat-console]");
+  const seatRefresh = q<HTMLButtonElement>("[data-seat-refresh]");
+  const seatMode = q<HTMLElement>("[data-seat-mode]");
+  const seatStatus = q<HTMLElement>("[data-seat-status]");
+  const seatCoach = q<HTMLSelectElement>("[data-seat-coach]");
+  const seatSteerer = q<HTMLSelectElement>("[data-seat-steerer]");
+  const seatPool = q<HTMLElement>("[data-seat-pool]");
+  const seatRemove = q<HTMLButtonElement>("[data-seat-remove]");
+  const seatDraftGrid = q<HTMLElement>("[data-seat-draft-grid]");
+  const seatPublished = q<HTMLElement>("[data-seat-published]");
+  const seatWarnings = q<HTMLElement>("[data-seat-warnings]");
+  const seatUndo = q<HTMLButtonElement>("[data-seat-undo]");
+  const seatReset = q<HTMLButtonElement>("[data-seat-reset]");
+  const seatSave = q<HTMLButtonElement>("[data-seat-save]");
+  const seatPublish = q<HTMLButtonElement>("[data-seat-publish]");
+  const seatRetry = q<HTMLButtonElement>("[data-seat-retry]");
   const apiUrl = root?.getAttribute("data-api-url")?.trim() || "";
   const client = apiUrl ? new DragonBoatApiClient({ baseUrl: apiUrl, timeoutMs: 30000 }) : null;
   const pendingRequests = new Map<string, { action: string; payload: Record<string, unknown>; requestId: string }>();
@@ -355,6 +415,24 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   let p2Refreshing = false;
   let p2Pending: { kind: "member" | "signup"; action: string; payload: Record<string, any>; requestId: string; accepted?: boolean; result?: any; draft?: any } | null = null;
   let draftAfterLogin: any = null;
+  let managedSeating: any = null;
+  let localSeatDraft: any = null;
+  let seatSelectedMemberId = "";
+  let seatHistory: any[] = [];
+  let seatDirty = false;
+  let seatSaving = false;
+  let seatPublishing = false;
+  let seatEditSequence = 0;
+  let seatReadVersion = 0;
+  let seatSaveTimer: number | undefined;
+  let seatPendingPayload: Record<string, any> | null = null;
+  let seatPendingAction = "";
+  let seatPendingKey = "";
+  let seatPendingSequence = -1;
+  let seatPendingAccepted = false;
+  let seatOutcomeUnknown = false;
+  let seatServerConflict = false;
+  let seatConflictServerReady = false;
 
   function setStatus(element: HTMLElement | null, message: string, state = "") {
     if (!element) return;
@@ -382,12 +460,20 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       MEMBER_HAS_ACTIVE_LINKS: "这位队员仍关联未结束训练。请先处理下方列出的报名、座位或带队角色，再停用。",
       MEMBER_INACTIVE: "这位队员已停用，不能为其新增或修改报名。请先核对队员状态。",
       MEMBER_NOT_FOUND: "本季找不到这位队员，请刷新名册。",
-      SIGNUP_ALREADY_EXISTS: "这位队员已经报名。已更新清单，请使用修改偏好或取消入口。",
-      SIGNUP_NOT_FOUND: "这条报名已不存在或已取消，请核对刷新后的清单。",
+      SIGNUP_EXISTS: "这位队员已经报名。已更新清单，请使用修改偏好或取消入口。",
+      SIGNUP_NOT_ACTIVE: "这条报名已不存在或已取消，请核对刷新后的清单。",
       PRACTICE_ENDED: "训练已经结束，报名记录只读；最终座位更正在后续排座阶段处理。",
       PRACTICE_CANCELLED: "训练已取消，不能再修改报名。",
       SIGNUP_CLOSED: "这次训练当前不接受报名修改，请核对服务器状态。",
       ROLE_CONFLICT: "这位队员已担任本次训练的 Coach 或 Steerer，不能同时占用划桨名额。",
+      ROLE_SIGNUP_CONFLICT: "带队人员仍有本次有效报名，请先在上方取消该报名。",
+      MEMBER_IS_TRAINING_LEADER: "这位队员已担任本次 Coach 或 Steerer，不能报名划桨。",
+      SEAT_MEMBER_NOT_CONFIRMED: "训练开始前，草稿船位只能放置本次已确认报名的队员。",
+      SEAT_MEMBER_DUPLICATE: "同一位队员不能占用两个船位。",
+      INVALID_SEAT_PLAN: "座位草稿格式不正确，请刷新并重新安排。",
+      SEAT_PLAN_INCOMPLETE: "发布前必须为每一位已确认报名者安排一个船位。",
+      PREFERENCE_ACK_REQUIRED: "草稿中有人被安排在与明确偏好不同的一侧，请核对后再次确认发布。",
+      SEAT_PLAN_FROZEN: "训练结束已满 24 小时，最终座位表已经冻结。",
       SEASON_NOT_OPEN: "赛季当前不可修改，请刷新赛季状态。",
       SERVICE_BUSY: "系统正在处理其他修改，请稍后使用同一请求重试。",
       NETWORK_ERROR: "暂时无法连接训练服务。",
@@ -466,6 +552,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       managementRetry.disabled = managementWriting;
     }
     updateP2Controls();
+    updateSeatControls();
   }
 
   function formObject(form: HTMLFormElement) {
@@ -572,7 +659,14 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       memberFields: memberInputValues(),
       practiceId: managedPracticePicker?.value || "",
       signupMemberId: managedSignupMember?.value || "",
-      preference: (managedSignupForm?.elements.namedItem("preference") as HTMLSelectElement | null)?.value || "AMBIENT"
+      preference: (managedSignupForm?.elements.namedItem("preference") as HTMLSelectElement | null)?.value || "AMBIENT",
+      seatDraft: localSeatDraft ? structuredClone(localSeatDraft) : null,
+      seatBaseVersion: managedSeating?.seat_plan_version,
+      seatBaseSignupVersion: managedSeating?.signup_version,
+      seatBasePracticeVersion: managedSeating?.practice?.practice_version,
+      seatBasePublishedRevision: managedSeating?.published_revision,
+      seatWasDirty: seatDirty,
+      seatSelectedMemberId
     };
   }
 
@@ -587,6 +681,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   function clearP2View() {
     p2ReadVersion += 1;
     practiceReadVersion += 1;
+    seatReadVersion += 1;
     p2SeasonId = "";
     managedMembers = [];
     managedRosterVersion = -1;
@@ -598,13 +693,33 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     p2Pending = null;
     p2Busy = false;
     p2Refreshing = false;
+    if (seatSaveTimer !== undefined) window.clearTimeout(seatSaveTimer);
+    seatSaveTimer = undefined;
+    managedSeating = null;
+    localSeatDraft = null;
+    seatSelectedMemberId = "";
+    seatHistory = [];
+    seatDirty = false;
+    seatSaving = false;
+    seatPublishing = false;
+    seatPendingPayload = null;
+    seatPendingAction = "";
+    seatPendingKey = "";
+    seatPendingSequence = -1;
+    seatPendingAccepted = false;
+    seatOutcomeUnknown = false;
+    seatServerConflict = false;
+    seatConflictServerReady = false;
     if (memberConsole) memberConsole.hidden = true;
     if (memberDetail) memberDetail.hidden = true;
     if (managedPracticeDetail) managedPracticeDetail.hidden = true;
+    if (seatConsole) seatConsole.hidden = true;
     [memberPicker, managedPracticePicker, managedSignupMember, managedSignupList, memberLinks].forEach((element) => element?.replaceChildren());
     [memberConsoleStatus, memberCount, memberSource, memberCurrentName, memberState, memberPreview, memberStatusExplanation, memberEditStatus,
       managedPracticeStatus, managedPracticeMeta, managedPracticeCounts, managedSignupCurrent, managedSignupPreview, managedSignupCancelText, managedSignupStatus]
       .forEach((element) => setStatus(element, ""));
+    [seatMode, seatStatus, seatWarnings].forEach((element) => setStatus(element, ""));
+    [seatCoach, seatSteerer, seatPool, seatDraftGrid, seatPublished].forEach((element) => element?.replaceChildren());
     if (memberSearch) memberSearch.value = "";
     if (managedSignupSearch) managedSignupSearch.value = "";
     memberEditForm?.reset();
@@ -622,29 +737,38 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     return managedPractice?.signups?.find((signup: any) => signup.member_id === managedSignupMember?.value);
   }
 
-  function updateP2Controls() {
-    const locked = p2Busy || Boolean(p2Pending);
+  function seatEditBlocked() {
+    return !managedSeating?.editable || seatServerConflict || seatPublishing || seatOutcomeUnknown || seatPendingAccepted;
+  }
+
+  function seatContextNeedsResolution() {
+    return Boolean(managedSeating && (seatDirty || seatSaving || seatPublishing || seatPendingPayload || seatServerConflict));
+  }
+
+  function updateP2Controls(updateSeats = true) {
+    const locked = p2Busy || Boolean(p2Pending) || managementWriting;
+    const seatLocked = seatContextNeedsResolution();
     [memberSearch, memberPicker, memberRefresh, managedPracticePicker, managedPracticeRefresh].forEach((control) => {
       if (control) control.disabled = locked;
     });
-    if (memberEditFields) memberEditFields.disabled = locked || !membersFresh || !currentMember();
-    if (managedSignupFields) managedSignupFields.disabled = locked || !membersFresh || !practiceFresh || !managedPractice?.management_signup_open;
-    if (seasonPicker) seasonPicker.disabled = locked || pendingRequests.size > 0;
-    if (refreshButton) refreshButton.disabled = locked || pendingRequests.size > 0;
-    if (openSeason) openSeason.disabled = locked || p2Refreshing || pendingRequests.size > 0 || !seasonPicker?.value;
-    if (openMembers) openMembers.disabled = locked || p2Refreshing || pendingRequests.size > 0 || !seasonPicker?.value;
+    if (memberEditFields) memberEditFields.disabled = locked || seatLocked || !membersFresh || !currentMember();
+    if (managedSignupFields) managedSignupFields.disabled = locked || seatLocked || !membersFresh || !practiceFresh || !managedPractice?.management_signup_open;
+    if (seasonPicker) seasonPicker.disabled = locked || seatLocked || pendingRequests.size > 0;
+    if (refreshButton) refreshButton.disabled = locked || seatLocked || pendingRequests.size > 0;
+    if (openSeason) openSeason.disabled = locked || seatLocked || p2Refreshing || pendingRequests.size > 0 || !seasonPicker?.value;
+    if (openMembers) openMembers.disabled = locked || seatLocked || p2Refreshing || pendingRequests.size > 0 || !seasonPicker?.value;
     if (memberRefresh) memberRefresh.disabled = locked || p2Refreshing;
     if (managedPracticeRefresh) managedPracticeRefresh.disabled = locked || p2Refreshing;
-    if (managedPracticePicker) managedPracticePicker.disabled = locked || p2Refreshing;
+    if (managedPracticePicker) managedPracticePicker.disabled = locked || seatLocked || p2Refreshing;
     if (seasonPicker) seasonPicker.disabled ||= p2Refreshing;
     memberEditForm?.querySelectorAll<HTMLButtonElement>('button[type="submit"]').forEach(button => {
-      button.disabled = locked || p2Refreshing || !membersFresh || !currentMember();
+      button.disabled = locked || seatLocked || p2Refreshing || !membersFresh || !currentMember();
     });
     const member = currentMember();
     const cannotDeactivate = member?.status === "ACTIVE" && member?.active_links?.length > 0;
-    if (memberStatusConfirm) memberStatusConfirm.disabled = locked || !membersFresh || !member || cannotDeactivate;
-    if (memberStatusButton) memberStatusButton.disabled = locked || p2Refreshing || !membersFresh || !member || cannotDeactivate || !memberStatusConfirm?.checked;
-    if (memberRestore) memberRestore.disabled = locked || p2Refreshing || !membersFresh || !member?.display_name_override;
+    if (memberStatusConfirm) memberStatusConfirm.disabled = locked || seatLocked || !membersFresh || !member || cannotDeactivate;
+    if (memberStatusButton) memberStatusButton.disabled = locked || seatLocked || p2Refreshing || !membersFresh || !member || cannotDeactivate || !memberStatusConfirm?.checked;
+    if (memberRestore) memberRestore.disabled = locked || seatLocked || p2Refreshing || !membersFresh || !member?.display_name_override;
     if (memberRetry) {
       memberRetry.hidden = p2Pending?.kind !== "member";
       memberRetry.disabled = p2Busy || p2Refreshing || !sessionToken;
@@ -655,10 +779,11 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       managedSignupRetry.disabled = p2Busy || p2Refreshing || !sessionToken;
       managedSignupRetry.textContent = p2Pending?.accepted ? "重新读取已保存结果" : "按原内容重试并确认结果";
     }
-    if (managedSignupCancel) managedSignupCancel.disabled = locked || !membersFresh || !practiceFresh || !managedSignupCancelConfirm?.checked || !managedPractice?.management_signup_open;
+    if (managedSignupCancel) managedSignupCancel.disabled = locked || seatLocked || !membersFresh || !practiceFresh || !managedSignupCancelConfirm?.checked || !managedPractice?.management_signup_open;
     const signupMember = managedMembers.find((item) => item.member_id === managedSignupMember?.value);
-    if (managedSignupSubmit) managedSignupSubmit.disabled = locked || p2Refreshing || !membersFresh || !practiceFresh || !managedPractice?.management_signup_open || signupMember?.status !== "ACTIVE";
+    if (managedSignupSubmit) managedSignupSubmit.disabled = locked || seatLocked || p2Refreshing || !membersFresh || !practiceFresh || !managedPractice?.management_signup_open || signupMember?.status !== "ACTIVE";
     if (managedSignupCancel) managedSignupCancel.disabled ||= p2Refreshing;
+    if (updateSeats) updateSeatControls();
   }
 
   async function loadP2Season() {
@@ -715,10 +840,14 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       managedPractice = view.practice;
       practiceFresh = true;
       renderManagedPractice(draft);
+      applySeatingWorkspace(view.seating, draft);
     } else {
       managedPractice = null;
       practiceFresh = false;
+      managedSeating = null;
+      localSeatDraft = null;
       if (managedPracticeDetail) managedPracticeDetail.hidden = true;
+      if (seatConsole) seatConsole.hidden = true;
     }
     if (currentSeasonData?.season.season_id === p2SeasonId) {
       currentSeasonData.season.roster_version = managedRosterVersion;
@@ -885,6 +1014,468 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     return ({ PRACTICE_ENDED: "训练已经结束。", PRACTICE_CANCELLED: "训练已取消。", SEASON_COMPLETED: "赛季已完成。", SEASON_NOT_OPEN: "赛季未开放。", SIGNUP_CLOSED: "当前不接受报名修改。" } as Record<string, string>)[reason] || "以服务器最新状态为准。";
   }
 
+  function cloneSeatDraft(value: any) {
+    const seats = Array.isArray(value?.seats) ? value.seats.filter((item: any) =>
+      Number.isInteger(Number(item?.row_number)) && Number(item.row_number) >= 1 && Number(item.row_number) <= 10
+      && ["LEFT", "RIGHT"].includes(String(item?.side)) && item?.member_id
+    ).map((item: any) => ({ row_number: Number(item.row_number), side: String(item.side), member_id: String(item.member_id) })) : [];
+    return {
+      coach_member_id: String(value?.coach_member_id || ""),
+      steerer_member_id: String(value?.steerer_member_id || ""),
+      seats
+    };
+  }
+
+  function seatWorkspaceVersionKey(value: any) {
+    return [
+      Number(value?.practice?.practice_version ?? managedPractice?.practice?.practice_version ?? -1),
+      Number(value?.signup_version ?? -1),
+      Number(value?.seat_plan_version ?? -1),
+      Number(value?.published_revision ?? -1)
+    ].join(":");
+  }
+
+  function preservedSeatVersionsMatch(preserved: any, next: any) {
+    return Number(preserved?.seatBaseVersion) === Number(next?.seat_plan_version)
+      && Number(preserved?.seatBaseSignupVersion) === Number(next?.signup_version)
+      && Number(preserved?.seatBasePracticeVersion) === Number(next?.practice?.practice_version ?? managedPractice?.practice?.practice_version)
+      && Number(preserved?.seatBasePublishedRevision) === Number(next?.published_revision);
+  }
+
+  function applySeatingWorkspace(value: any, preserved: any = null) {
+    const next = value?.seating || value;
+    if (!next || !next.draft || !Number.isInteger(Number(next.seat_plan_version))) {
+      managedSeating = null;
+      localSeatDraft = null;
+      if (seatConsole) seatConsole.hidden = true;
+      return;
+    }
+    const previousVersionKey = seatWorkspaceVersionKey(managedSeating);
+    const localWasDirty = seatDirty && localSeatDraft;
+    managedSeating = next;
+    if (preserved?.seatDraft && preserved.practiceId === managedPractice?.practice?.practice_id
+        && preservedSeatVersionsMatch(preserved, next)) {
+      localSeatDraft = cloneSeatDraft(preserved.seatDraft);
+      seatSelectedMemberId = String(preserved.seatSelectedMemberId || "");
+      seatDirty = JSON.stringify(localSeatDraft) !== JSON.stringify(cloneSeatDraft(next.draft));
+      seatServerConflict = false;
+      seatConflictServerReady = false;
+    } else if (preserved?.seatDraft && preserved?.seatWasDirty
+        && preserved.practiceId === managedPractice?.practice?.practice_id) {
+      localSeatDraft = cloneSeatDraft(preserved.seatDraft);
+      seatSelectedMemberId = String(preserved.seatSelectedMemberId || "");
+      seatDirty = true;
+      seatServerConflict = true;
+      seatConflictServerReady = true;
+      setStatus(seatStatus, "重新登录期间服务器版本已经变化。当前本地草稿已保留；请先核对并采用服务器草稿，再重新安排。", "error");
+    } else if (localWasDirty && previousVersionKey !== seatWorkspaceVersionKey(next)) {
+      seatServerConflict = true;
+      seatConflictServerReady = true;
+      setStatus(seatStatus, "服务器排座在本地草稿编辑期间发生了变化。当前输入已保留；请先采用服务器草稿，或刷新后重新安排。", "error");
+    } else if (!localWasDirty || !localSeatDraft) {
+      localSeatDraft = cloneSeatDraft(next.draft);
+      seatDirty = false;
+      seatServerConflict = false;
+      seatConflictServerReady = false;
+      seatHistory = [];
+    }
+    if (seatConsole) seatConsole.hidden = false;
+    renderSeatEditor();
+  }
+
+  function seatMember(memberId: string) {
+    return managedMembers.find((member) => member.member_id === memberId);
+  }
+
+  function seatSignup(memberId: string) {
+    return managedPractice?.signups?.find((signup: any) => signup.member_id === memberId && signup.status !== "CANCELLED");
+  }
+
+  function preferenceShort(memberId: string) {
+    const preference = seatSignup(memberId)?.preference || seatMember(memberId)?.default_preference || "AMBIENT";
+    return ({ LEFT: "L", AMBIENT: "A", RIGHT: "R" } as Record<string, string>)[preference] || "A";
+  }
+
+  function selectedDraftSeat(memberId = seatSelectedMemberId) {
+    return localSeatDraft?.seats?.find((item: any) => item.member_id === memberId) || null;
+  }
+
+  function createRoleOptions(select: HTMLSelectElement | null, selected: string) {
+    if (!select) return;
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "尚未设置";
+    const options = managedMembers.map((member) => {
+      const option = document.createElement("option");
+      option.value = member.member_id;
+      const activeSignup = seatSignup(member.member_id);
+      option.textContent = `${member.display_name}${activeSignup && managedSeating?.mode === "UPCOMING" ? " · 请先取消报名" : ""}`;
+      option.disabled = Boolean(activeSignup && managedSeating?.mode === "UPCOMING" && member.member_id !== selected);
+      return option;
+    });
+    select.replaceChildren(empty, ...options);
+    select.value = selected;
+  }
+
+  function renderSeatEditor() {
+    if (!managedSeating || !localSeatDraft || !managedPractice) {
+      if (seatConsole) seatConsole.hidden = true;
+      return;
+    }
+    if (seatConsole) seatConsole.hidden = false;
+    const modeLabels: Record<string, string> = {
+      UPCOMING: "训练前排座：正式发布前必须为每位确认报名者安排一个船位。",
+      FINAL_CORRECTION: `最终座位表更正：报名记录保持不变，可更正实际出席与带队人员，截止 ${new Date(managedSeating.archive_due_at).toLocaleString()}。`,
+      FROZEN: "最终更正时间已到，当前正式版本只读。",
+      CANCELLED: "训练已取消，排座只读。"
+    };
+    if (seatMode) seatMode.textContent = `${modeLabels[managedSeating.mode] || "以服务器状态为准。"} 草稿 v${managedSeating.seat_plan_version} · 正式 revision ${managedSeating.published_revision || 0}`;
+    createRoleOptions(seatCoach, localSeatDraft.coach_member_id);
+    createRoleOptions(seatSteerer, localSeatDraft.steerer_member_id);
+
+    const occupied = new Set(localSeatDraft.seats.map((item: any) => item.member_id));
+    const roleIds = new Set([localSeatDraft.coach_member_id, localSeatDraft.steerer_member_id].filter(Boolean));
+    const candidateIds: string[] = managedSeating.mode === "FINAL_CORRECTION"
+      ? managedMembers.map((member) => String(member.member_id))
+      : (managedPractice.signups || []).filter((signup: any) => signup.status === "CONFIRMED").map((signup: any) => String(signup.member_id));
+    const poolMembers = [...new Set<string>(candidateIds)]
+      .filter((memberId) => !occupied.has(memberId) && !roleIds.has(memberId))
+      .map((memberId) => seatMember(memberId)).filter(Boolean);
+    if (seatPool) {
+      seatPool.replaceChildren(...poolMembers.map((member: any) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "dragon-boat-seat-person";
+        button.dataset.memberId = member.member_id;
+        button.disabled = seatEditBlocked();
+        button.draggable = !seatEditBlocked();
+        button.setAttribute("aria-pressed", String(seatSelectedMemberId === member.member_id));
+        const name = document.createElement("strong");
+        name.textContent = member.display_name;
+        const detail = document.createElement("span");
+        detail.textContent = `${preferenceShort(member.member_id)} · ${managedSeating.mode === "FINAL_CORRECTION" ? "本季成员" : "已确认待排座"}`;
+        button.append(name, detail);
+        button.addEventListener("click", () => {
+          seatSelectedMemberId = seatSelectedMemberId === member.member_id ? "" : member.member_id;
+          renderSeatEditor();
+        });
+        button.addEventListener("dragstart", (event) => event.dataTransfer?.setData("text/plain", member.member_id));
+        return button;
+      }));
+      if (!poolMembers.length) {
+        const empty = document.createElement("p");
+        empty.textContent = managedSeating.mode === "FINAL_CORRECTION" ? "全部可用成员已安排或设为带队人员。" : "没有已确认且待排座的队员。";
+        seatPool.append(empty);
+      }
+    }
+    if (seatDraftGrid) {
+      const rows = Array.from({ length: 10 }, (_, index) => index + 1).map((rowNumber) => {
+        const row = document.createElement("div");
+        row.className = "dragon-boat-seat-draft-row";
+        const left = createSeatTarget(rowNumber, "LEFT");
+        const number = document.createElement("span");
+        number.textContent = String(rowNumber);
+        const right = createSeatTarget(rowNumber, "RIGHT");
+        row.append(left, number, right);
+        return row;
+      });
+      seatDraftGrid.replaceChildren(...rows);
+    }
+    if (seatPublished) renderSeatPlan(seatPublished, managedSeating.published || managedPractice.seat_plan, {
+      timeZone: managedPractice.practice?.timezone
+    });
+    const mismatches = localSeatDraft.seats.filter((item: any) => {
+      const preference = seatSignup(item.member_id)?.preference;
+      return (preference === "LEFT" && item.side !== "LEFT") || (preference === "RIGHT" && item.side !== "RIGHT");
+    });
+    if (seatWarnings) seatWarnings.textContent = mismatches.length
+      ? `偏好提醒：${mismatches.map((item: any) => seatMember(item.member_id)?.display_name || item.member_id).join("、")} 的明确左右偏好与草稿船位不一致。允许发布，但必须再次确认。`
+      : "发布会建立新的不可变正式 revision；之后的草稿修改不会影响队员当前看到的版本。";
+    updateSeatControls();
+  }
+
+  function createSeatTarget(rowNumber: number, side: "LEFT" | "RIGHT") {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "dragon-boat-seat-target";
+    const occupant = localSeatDraft?.seats?.find((item: any) => item.row_number === rowNumber && item.side === side);
+    button.setAttribute("aria-label", `第 ${rowNumber} 排${side === "LEFT" ? "左侧" : "右侧"}${occupant ? `，${seatMember(occupant.member_id)?.display_name || "已有队员"}` : "，空位"}`);
+    button.setAttribute("aria-pressed", String(Boolean(occupant && occupant.member_id === seatSelectedMemberId)));
+    const name = document.createElement("strong");
+    name.textContent = occupant ? seatMember(occupant.member_id)?.display_name || "未知队员" : "空位";
+    const detail = document.createElement("span");
+    detail.textContent = occupant ? `${preferenceShort(occupant.member_id)} · ${side}` : side;
+    button.append(name, detail);
+    button.disabled = seatEditBlocked();
+    button.draggable = Boolean(occupant && !button.disabled);
+    button.addEventListener("click", () => handleSeatTarget(rowNumber, side, occupant));
+    button.addEventListener("dragstart", (event) => {
+      if (occupant) event.dataTransfer?.setData("text/plain", occupant.member_id);
+    });
+    button.addEventListener("dragover", (event) => {
+      if (!button.disabled) event.preventDefault();
+    });
+    button.addEventListener("drop", (event) => {
+      if (button.disabled) return;
+      event.preventDefault();
+      const memberId = event.dataTransfer?.getData("text/plain") || "";
+      if (!seatMember(memberId)) return;
+      seatSelectedMemberId = memberId;
+      handleSeatTarget(rowNumber, side, occupant);
+    });
+    return button;
+  }
+
+  function handleSeatTarget(rowNumber: number, side: "LEFT" | "RIGHT", occupant: any) {
+    if (seatEditBlocked()) return;
+    if (!seatSelectedMemberId) {
+      if (occupant) {
+        seatSelectedMemberId = occupant.member_id;
+        renderSeatEditor();
+      }
+      return;
+    }
+    if (occupant?.member_id === seatSelectedMemberId) {
+      seatSelectedMemberId = "";
+      return renderSeatEditor();
+    }
+    const before = cloneSeatDraft(localSeatDraft);
+    const source = selectedDraftSeat();
+    localSeatDraft.seats = localSeatDraft.seats.filter((item: any) => item.member_id !== seatSelectedMemberId
+      && !(item.row_number === rowNumber && item.side === side));
+    if (occupant && source) localSeatDraft.seats.push({ ...source, member_id: occupant.member_id });
+    localSeatDraft.seats.push({ row_number: rowNumber, side, member_id: seatSelectedMemberId });
+    seatHistory.push(before);
+    if (seatHistory.length > 20) seatHistory.shift();
+    seatSelectedMemberId = "";
+    markSeatDirty("EDIT");
+  }
+
+  function markSeatDirty(changeKind = "EDIT") {
+    seatDirty = true;
+    seatEditSequence += 1;
+    renderSeatEditor();
+    setStatus(seatStatus, "草稿有未保存调整，系统即将自动保存……", "pending");
+    scheduleSeatSave(changeKind);
+  }
+
+  function scheduleSeatSave(changeKind = "EDIT") {
+    if (seatSaveTimer !== undefined) window.clearTimeout(seatSaveTimer);
+    seatSaveTimer = window.setTimeout(() => { saveSeatDraft(changeKind); }, 650);
+  }
+
+  function updateSeatControls() {
+    const editBlocked = seatEditBlocked();
+    const unresolved = seatOutcomeUnknown || seatPendingAccepted;
+    if (seatCoach) seatCoach.disabled = editBlocked;
+    if (seatSteerer) seatSteerer.disabled = editBlocked;
+    if (seatRefresh) seatRefresh.disabled = seatSaving || seatPublishing || unresolved || !managedPractice;
+    if (seatRemove) seatRemove.disabled = editBlocked || !Boolean(selectedDraftSeat());
+    if (seatUndo) seatUndo.disabled = editBlocked || !seatHistory.length;
+    if (seatReset) {
+      seatReset.disabled = seatSaving || seatPublishing || unresolved || !managedSeating
+        || (seatServerConflict ? !seatConflictServerReady : !managedSeating.editable);
+      seatReset.textContent = seatServerConflict
+        ? (seatConflictServerReady ? "采用服务器草稿" : "请先刷新服务器草稿")
+        : "从正式版重置草稿";
+    }
+    if (seatSave) seatSave.disabled = editBlocked || seatSaving || !seatDirty;
+    if (seatPublish) seatPublish.disabled = editBlocked || seatSaving || seatDirty;
+    if (seatRetry) {
+      seatRetry.hidden = !seatPendingPayload || (!seatOutcomeUnknown && !seatPendingAccepted);
+      seatRetry.disabled = seatSaving || seatPublishing || !sessionToken;
+      seatRetry.textContent = seatPendingAccepted ? "重新读取已保存排座"
+        : seatPendingAction === "publishSeatPlan" ? "按原版本重试发布" : "按原草稿重试并确认结果";
+    }
+    updateP2Controls(false);
+  }
+
+  function buildSeatDraftPayload(changeKind = "EDIT") {
+    if (!managedSeating || !localSeatDraft || !managedPractice) return null;
+    return {
+      season_id: p2SeasonId,
+      practice_id: managedPractice.practice.practice_id,
+      practice_version: managedPractice.practice.practice_version,
+      signup_version: managedPractice.signup_version,
+      seat_plan_version: managedSeating.seat_plan_version,
+      published_revision: managedSeating.published_revision || 0,
+      coach_member_id: localSeatDraft.coach_member_id,
+      steerer_member_id: localSeatDraft.steerer_member_id,
+      seats: localSeatDraft.seats.map((item: any) => ({ ...item })),
+      change_kind: changeKind
+    };
+  }
+
+  function updateFromSeatResponse(data: any, sentSequence: number) {
+    const workspaceData = data?.seating || data;
+    const expectedPracticeId = managedPractice?.practice?.practice_id;
+    if (!workspaceData?.draft || workspaceData.practice_id !== expectedPracticeId
+        || !Number.isInteger(Number(workspaceData.seat_plan_version))) {
+      throw new DragonBoatApiError("INVALID_RESPONSE", "服务器返回的排座视图不完整。", { retryable: true });
+    }
+    if (data?.practice && Array.isArray(data?.signups)) {
+      managedPractice = {
+        ...managedPractice,
+        practice: data.practice,
+        signup_version: data.signup_version,
+        signups: data.signups,
+        counts: data.counts || managedPractice?.counts,
+        signup_open: data.signup_open ?? managedPractice?.signup_open,
+        management_signup_open: data.management_signup_open ?? managedPractice?.management_signup_open,
+        closed_reason: data.closed_reason || managedPractice?.closed_reason,
+        seat_plan: data.seat_plan || managedPractice?.seat_plan,
+        generated_at: data.generated_at || new Date().toISOString()
+      };
+      renderManagedPractice({ practiceId: data.practice.practice_id });
+    } else if (managedPractice && workspaceData?.published) {
+      managedPractice.seat_plan = workspaceData.published;
+    }
+    managedSeating = workspaceData;
+    if (sentSequence === seatEditSequence) {
+      localSeatDraft = cloneSeatDraft(workspaceData.draft);
+      seatDirty = false;
+      seatServerConflict = false;
+      seatConflictServerReady = false;
+    }
+    renderSeatEditor();
+  }
+
+  function clearSeatPending() {
+    seatPendingAction = "";
+    seatPendingPayload = null;
+    seatPendingKey = "";
+    seatPendingSequence = -1;
+    seatPendingAccepted = false;
+    seatOutcomeUnknown = false;
+  }
+
+  function seatRequestContextMatches(token: string, practiceId: string) {
+    return Boolean(token && token === sessionToken && practiceId
+      && practiceId === managedPractice?.practice?.practice_id);
+  }
+
+  async function submitSeatRequest(action: string, payload: Record<string, any>, key: string, sentSequence: number, retryExisting = false) {
+    const token = sessionToken;
+    const practiceId = String(payload.practice_id || "");
+    if (!retryExisting) {
+      seatPendingAction = action;
+      seatPendingPayload = structuredClone(payload);
+      seatPendingKey = key;
+      seatPendingSequence = sentSequence;
+      seatPendingAccepted = false;
+      seatOutcomeUnknown = false;
+    } else {
+      action = seatPendingAction;
+      payload = seatPendingPayload || payload;
+      key = seatPendingKey;
+      sentSequence = seatPendingSequence;
+    }
+    if (!seatRequestContextMatches(token, practiceId)) return false;
+    action === "publishSeatPlan" ? seatPublishing = true : seatSaving = true;
+    updateSeatControls();
+    try {
+      let responseData;
+      if (seatPendingAccepted) {
+        const response = await client!.post("getSeatingWorkspace", {
+          session_token: token, season_id: p2SeasonId, practice_id: practiceId
+        });
+        responseData = response.data;
+      } else {
+        const response = await managedPost(action, payload, key);
+        if (!seatRequestContextMatches(token, practiceId)) return false;
+        seatPendingAccepted = true;
+        seatOutcomeUnknown = false;
+        responseData = response.data;
+      }
+      if (!seatRequestContextMatches(token, practiceId)) return false;
+      updateFromSeatResponse(responseData, sentSequence);
+      const newerEditsRemain = sentSequence < seatEditSequence && seatDirty;
+      const publishedRevision = responseData.published_revision ?? responseData.seating?.published_revision ?? managedSeating?.published_revision;
+      clearSeatPending();
+      setStatus(seatStatus, action === "publishSeatPlan"
+        ? `正式座位表已发布为 revision ${publishedRevision}。`
+        : newerEditsRemain ? "较早的草稿版本已保存；刚才继续做出的调整即将自动保存。" : "私有排座草稿已由服务器保存。", newerEditsRemain ? "pending" : "ready");
+      return true;
+    } catch (error) {
+      if (!seatRequestContextMatches(token, practiceId) || protectedError(error)) return false;
+      if (seatPendingAccepted) {
+        seatOutcomeUnknown = false;
+        setStatus(seatStatus, `服务器已经确认写入，但最新排座读取失败。请点击「重新读取已保存排座」，不会再次发送写入。${messageForError(error)}`, "error");
+        return false;
+      }
+      const uncertain = !(error instanceof DragonBoatApiError) || error.retryable || ["INVALID_RESPONSE", "CONTRACT_MISMATCH"].includes(error.code);
+      if (uncertain) {
+        seatOutcomeUnknown = true;
+      } else {
+        clearSeatPending();
+        if (error instanceof DragonBoatApiError && error.code === "VERSION_CONFLICT") {
+          seatServerConflict = true;
+          seatConflictServerReady = false;
+          renderSeatEditor();
+        }
+      }
+      setStatus(seatStatus, uncertain
+        ? `${messageForError(error)} 结果尚未确认，原草稿和请求编号已经锁定，请使用下方重试。`
+        : error instanceof DragonBoatApiError && error.code === "VERSION_CONFLICT"
+          ? `${messageForError(error)} 本地草稿仍保留。请先刷新排座；读取最新服务器草稿后才可选择采用。`
+          : `${messageForError(error)} 本地草稿仍保留，请按提示处理或刷新。`, "error");
+      return false;
+    } finally {
+      if (seatRequestContextMatches(token, practiceId)) {
+        seatSaving = false;
+        seatPublishing = false;
+        updateSeatControls();
+        if (!seatPendingPayload && seatDirty && sentSequence < seatEditSequence && !seatServerConflict) scheduleSeatSave("EDIT");
+      }
+    }
+  }
+
+  async function saveSeatDraft(changeKind = "EDIT") {
+    if (seatSaveTimer !== undefined) window.clearTimeout(seatSaveTimer);
+    seatSaveTimer = undefined;
+    if (!seatDirty || seatSaving || seatPublishing || seatPendingPayload || seatServerConflict) return false;
+    const payload = buildSeatDraftPayload(changeKind);
+    if (!payload) return false;
+    const sentSequence = seatEditSequence;
+    return submitSeatRequest("saveSeatPlanDraft", payload,
+      `seat-draft:${payload.practice_id}:${payload.seat_plan_version}`, sentSequence);
+  }
+
+  async function refreshSeating(preserveLocal = true) {
+    if (!client || !sessionToken || !p2SeasonId || !managedPractice || seatSaving || seatPublishing || seatOutcomeUnknown || seatPendingAccepted) return false;
+    const token = sessionToken;
+    const practiceId = managedPractice.practice.practice_id;
+    const revision = ++seatReadVersion;
+    const local = preserveLocal && localSeatDraft ? cloneSeatDraft(localSeatDraft) : null;
+    const baseVersionKey = seatWorkspaceVersionKey(managedSeating);
+    setStatus(seatStatus, "正在读取服务器最新排座……", "pending");
+    try {
+      const response = await client.post("getSeatingWorkspace", {
+        session_token: token, season_id: p2SeasonId, practice_id: practiceId
+      });
+      if (!seatRequestContextMatches(token, practiceId) || revision !== seatReadVersion
+          || response.data.practice?.practice_id !== practiceId) return false;
+      if (local && seatDirty && (seatServerConflict || seatWorkspaceVersionKey(response.data) !== baseVersionKey)) {
+        managedSeating = response.data;
+        localSeatDraft = local;
+        seatServerConflict = true;
+        seatConflictServerReady = true;
+        renderSeatEditor();
+        setStatus(seatStatus, "服务器已有更新，本地草稿已保留。请选择采用服务器草稿后再重新安排。", "error");
+      } else {
+        updateFromSeatResponse(response.data, seatEditSequence);
+        seatConflictServerReady = false;
+        setStatus(seatStatus, "已读取服务器最新排座。", "ready");
+      }
+      return true;
+    } catch (error) {
+      if (seatRequestContextMatches(token, practiceId) && revision === seatReadVersion && !protectedError(error)) {
+        setStatus(seatStatus, messageForError(error), "error");
+      }
+      return false;
+    }
+  }
+
   function renderManagedSignupMemberPicker(preferred = "") {
     if (!managedSignupMember) return;
     const query = managedSignupSearch?.value.trim().toLocaleLowerCase() || "";
@@ -922,7 +1513,8 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   }
 
   async function startP2Mutation(kind: "member" | "signup", action: string, payload: Record<string, any>) {
-    if (p2Busy || p2Pending || p2Refreshing || !sessionToken || !membersFresh || (kind === "signup" && !practiceFresh)) return;
+    if (p2Busy || p2Pending || p2Refreshing || managementWriting || seatContextNeedsResolution()
+        || !sessionToken || !membersFresh || (kind === "signup" && !practiceFresh)) return;
     p2Pending = { kind, action, payload: structuredClone({ ...payload, include_current_view: true,
       known_roster_version: managedRosterVersion, view_practice_id: managedPracticePicker?.value || "" }),
       requestId: createRequestId(), draft: captureP2Draft() };
@@ -1150,7 +1742,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     setStatus(memberEditStatus, "");
   });
   memberEditForm?.addEventListener("input", renderMemberPreview);
-  memberStatusConfirm?.addEventListener("change", updateP2Controls);
+  memberStatusConfirm?.addEventListener("change", () => updateP2Controls());
   memberEditForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     const member = currentMember();
@@ -1205,12 +1797,28 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   });
   async function refreshSelectedPractice(preserveInput: boolean) {
     if (p2Busy || p2Pending || p2Refreshing) return;
+    if (!preserveInput && seatContextNeedsResolution()) {
+      if (managedPracticePicker && managedPractice?.practice?.practice_id) managedPracticePicker.value = managedPractice.practice.practice_id;
+      setStatus(seatStatus, "当前排座仍有未保存、待确认或冲突内容。请先完成排座处理，再切换训练。", "error");
+      return;
+    }
     const draft = preserveInput ? captureP2Draft() : null;
     const token = sessionToken;
     p2Refreshing = true;
     updateP2Controls();
     if (!preserveInput) {
+      if (seatSaveTimer !== undefined) window.clearTimeout(seatSaveTimer);
+      seatSaveTimer = undefined;
+      seatReadVersion += 1;
       managedPractice = null;
+      managedSeating = null;
+      localSeatDraft = null;
+      seatSelectedMemberId = "";
+      seatHistory = [];
+      seatDirty = false;
+      seatServerConflict = false;
+      seatConflictServerReady = false;
+      if (seatConsole) seatConsole.hidden = true;
       if (managedPracticeDetail) managedPracticeDetail.hidden = true;
       if (managedSignupSearch) managedSignupSearch.value = "";
       if (managedSignupMember) managedSignupMember.value = "";
@@ -1238,7 +1846,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     renderManagedSignupSelection();
     setStatus(managedSignupStatus, "");
   });
-  managedSignupCancelConfirm?.addEventListener("change", updateP2Controls);
+  managedSignupCancelConfirm?.addEventListener("change", () => updateP2Controls());
   function managedSignupPayload() {
     if (!managedPractice || !p2SeasonId || !managedSignupMember?.value || !managedPractice.management_signup_open) return null;
     return {
@@ -1263,6 +1871,94 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     const payload = managedSignupPayload();
     if (!payload || !managedSignupCancelConfirm?.checked || currentManagedSignup()?.status === "CANCELLED") return;
     startP2Mutation("signup", "cancelSignupByCoach", payload);
+  });
+
+  function changeSeatRole(field: "coach_member_id" | "steerer_member_id", value: string) {
+    if (!localSeatDraft || seatEditBlocked()) return;
+    if (localSeatDraft[field] === value) return;
+    const before = cloneSeatDraft(localSeatDraft);
+    localSeatDraft[field] = value;
+    if (value) localSeatDraft.seats = localSeatDraft.seats.filter((item: any) => item.member_id !== value);
+    seatHistory.push(before);
+    if (seatHistory.length > 20) seatHistory.shift();
+    seatSelectedMemberId = "";
+    markSeatDirty("EDIT");
+  }
+
+  seatCoach?.addEventListener("change", () => changeSeatRole("coach_member_id", seatCoach.value));
+  seatSteerer?.addEventListener("change", () => changeSeatRole("steerer_member_id", seatSteerer.value));
+  seatRemove?.addEventListener("click", () => {
+    const source = selectedDraftSeat();
+    if (!source || !localSeatDraft || seatEditBlocked()) return;
+    seatHistory.push(cloneSeatDraft(localSeatDraft));
+    if (seatHistory.length > 20) seatHistory.shift();
+    localSeatDraft.seats = localSeatDraft.seats.filter((item: any) => item.member_id !== seatSelectedMemberId);
+    seatSelectedMemberId = "";
+    markSeatDirty("EDIT");
+  });
+  seatUndo?.addEventListener("click", () => {
+    const previous = seatHistory.pop();
+    if (!previous || seatEditBlocked()) return;
+    localSeatDraft = cloneSeatDraft(previous);
+    seatSelectedMemberId = "";
+    markSeatDirty("UNDO");
+  });
+  seatReset?.addEventListener("click", () => {
+    if (!managedSeating || seatSaving || seatPublishing || seatOutcomeUnknown || seatPendingAccepted) return;
+    if (seatServerConflict) {
+      if (!seatConflictServerReady) return;
+      localSeatDraft = cloneSeatDraft(managedSeating.draft);
+      seatDirty = false;
+      seatServerConflict = false;
+      seatConflictServerReady = false;
+      seatHistory = [];
+      seatSelectedMemberId = "";
+      renderSeatEditor();
+      setStatus(seatStatus, "已采用服务器草稿。本地冲突版本没有提交。", "ready");
+      return;
+    }
+    if (!managedSeating.editable || !localSeatDraft) return;
+    seatHistory.push(cloneSeatDraft(localSeatDraft));
+    const published = managedSeating.published;
+    localSeatDraft = cloneSeatDraft(published ? {
+      coach_member_id: published.coach?.member_id || "",
+      steerer_member_id: published.steerer?.member_id || "",
+      seats: published.seats || []
+    } : { seats: [] });
+    seatSelectedMemberId = "";
+    markSeatDirty("RESET_TO_PUBLISHED");
+  });
+  seatSave?.addEventListener("click", () => saveSeatDraft("EDIT"));
+  seatRefresh?.addEventListener("click", () => refreshSeating(true));
+  seatRetry?.addEventListener("click", async () => {
+    if (!seatPendingPayload || !seatPendingAction || !seatPendingKey || seatSaving || seatPublishing) return;
+    await submitSeatRequest(seatPendingAction, seatPendingPayload, seatPendingKey, seatPendingSequence, true);
+  });
+  seatPublish?.addEventListener("click", async () => {
+    if (!managedSeating?.editable || !managedPractice || seatSaving || seatPublishing || seatPendingPayload || seatServerConflict) return;
+    if (seatDirty) {
+      const saved = await saveSeatDraft("EDIT");
+      if (!saved || seatDirty || seatPendingPayload) return;
+    }
+    const mismatches = managedSeating.preference_mismatches || [];
+    const acknowledged = mismatches.length > 0
+      ? window.confirm(`有 ${mismatches.length} 位队员的明确左右偏好与船位不同。确认仍按当前草稿发布吗？`)
+      : false;
+    if (mismatches.length && !acknowledged) {
+      setStatus(seatStatus, "发布已取消，草稿保持不变。", "pending");
+      return;
+    }
+    const payload = {
+      season_id: p2SeasonId,
+      practice_id: managedPractice.practice.practice_id,
+      practice_version: managedPractice.practice.practice_version,
+      signup_version: managedPractice.signup_version,
+      seat_plan_version: managedSeating.seat_plan_version,
+      published_revision: managedSeating.published_revision || 0,
+      acknowledge_preference_mismatch: acknowledged
+    };
+    await submitSeatRequest("publishSeatPlan", payload,
+      `seat-publish:${payload.practice_id}:${payload.seat_plan_version}:${payload.published_revision}`, seatEditSequence);
   });
 
   loginForm?.addEventListener("submit", async (event) => {

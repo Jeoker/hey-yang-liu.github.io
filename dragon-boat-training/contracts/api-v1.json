@@ -14,6 +14,14 @@
       "roster": "Public roster returned when known_roster_version differs or roster_expires_at has expired. Cache hints never authorize a write. Browser validates season, binding and roster versions and absolute expiry.",
       "management": "Full protected members returned only when roster version differs; current member_links always returned. view_practice_id scopes member-edit readback, cannot change the mutation target.",
       "retry": "View preferences are excluded from the business payload digest. Unknown writes keep the original request ID and payload. An acknowledged write needing a view retries reads only. Late or wrong-entity views never replace newer visible data."
+    },
+    "seating": {
+      "since_service_version": "0.6.0-p3",
+      "compatibility": "Additive fields and POST actions; contract version remains compatible while the older Pages client ignores seat_plan.",
+      "public_projection": "Every practice read may include seat_plan. It contains only the latest published or frozen revision, never the Coach draft.",
+      "management_projection": "Seating workspaces contain the private draft, latest public revision, full-season member choices, pending confirmed members, server mode and edit boundary.",
+      "versions": "seat_plan_version protects the Coach draft; published_revision protects the public pointer. Signup mutations can advance both in the same recoverable journal plan.",
+      "correction_window": "At end_at, signup changes stop and FINAL_CORRECTION begins. Direct seat changes remain available strictly before archive_due_at=end_at+24 hours; the exact boundary is frozen even if a background trigger is late."
     }
   },
   "transport": {
@@ -55,14 +63,14 @@
     "getMemberWorkspace": {
       "methods": ["POST"], "authentication": "session_token", "writes_data": false,
       "request_fields": ["session_token", "season_id", "optional practice_id", "optional known_roster_version"],
-      "response_fields": ["season", "practices", "season_id", "season_status", "roster_version", "binding_version", "generated_at", "optional practice", "optional members", "member_links"],
-      "notes": "Reads an open season management workspace under one lock. Published practices only; chooses the first if practice_id is omitted. Returns full members if version differs. VIEW_UNAVAILABLE is a retryable read failure, never evidence of a failed prior mutation."
+      "response_fields": ["season", "practices", "season_id", "season_status", "roster_version", "binding_version", "generated_at", "optional practice", "optional members", "member_links", "optional seating"],
+      "notes": "Reads a current or completed season management workspace under one lock. Published practices only; chooses the first if practice_id is omitted. Returns full members if version differs. A selected practice also returns its seating workspace, including an eligible final-correction window. VIEW_UNAVAILABLE is a retryable read failure, never evidence of a failed prior mutation."
     },
     "practice": {
       "methods": ["GET"], "authentication": "public", "writes_data": false,
       "request_fields": ["season_id", "practice_id"],
-      "response_fields": ["season_id", "practice", "signup_version", "roster_version", "binding_version", "signup_open", "management_signup_open", "closed_reason", "counts", "signups", "generated_at"],
-      "notes": "Requires both a published practice and an opened week. Reads the latest signup state, never a ten-minute training cache. Cancelled rows are excluded. Confirmed and waitlisted rows carry member_id, display_name, preference, status, queue_at, queue_sequence and waitlist_position."
+      "response_fields": ["season_id", "practice", "signup_version", "roster_version", "binding_version", "signup_open", "management_signup_open", "closed_reason", "counts", "signups", "seat_plan", "generated_at"],
+      "notes": "Requires both a published practice and an opened week. Reads the latest signup and public seat-plan state, never a ten-minute training cache. Cancelled rows are excluded. Confirmed and waitlisted rows carry member_id, display_name, preference, status, queue_at, queue_sequence and waitlist_position. seat_plan never contains a private draft."
     },
     "signup": {
       "methods": ["POST"], "authentication": "public", "writes_data": true,
@@ -249,6 +257,30 @@
       "response_fields": ["week", "practice"],
       "writes_data": true,
       "notes": "Publishes only the named additional practice."
+    },
+    "getSeatingWorkspace": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "season_id", "practice_id"],
+      "response_fields": ["season_id", "practice_id", "practice", "mode", "editable", "archive_due_at", "generated_at", "signup_version", "seat_plan_version", "published_revision", "draft", "published", "members", "signups", "unseated_member_ids", "preference_mismatches"],
+      "writes_data": false,
+      "notes": "Returns one published practice, its signup state, the private Coach draft, the latest public revision, full-season members and server-calculated UPCOMING, FINAL_CORRECTION, FROZEN or CANCELLED mode. A completed season remains readable while a practice correction window is open."
+    },
+    "saveSeatPlanDraft": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "season_id", "practice_id", "practice_version", "signup_version", "seat_plan_version", "published_revision", "coach_member_id", "steerer_member_id", "seats", "change_kind"],
+      "response_fields": ["season_id", "practice_id", "practice", "mode", "editable", "archive_due_at", "generated_at", "signup_version", "seat_plan_version", "published_revision", "draft", "published", "members", "signups", "unseated_member_ids", "preference_mismatches"],
+      "writes_data": true,
+      "notes": "Saves a complete private draft snapshot. change_kind is EDIT, UNDO or RESET_TO_PUBLISHED. Coach and Steerer may be the same member; neither can occupy a paddle seat. Before training, seat members must be active confirmed signups. During final correction any member of this season may reflect actual attendance."
+    },
+    "publishSeatPlan": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "request_fields": ["session_token", "season_id", "practice_id", "practice_version", "signup_version", "seat_plan_version", "published_revision", "acknowledge_preference_mismatch"],
+      "response_fields": ["season_id", "practice_id", "practice", "mode", "editable", "archive_due_at", "generated_at", "signup_version", "seat_plan_version", "published_revision", "draft", "published", "members", "signups", "unseated_member_ids", "preference_mismatches"],
+      "writes_data": true,
+      "notes": "Publishes an immutable revision. Before training, every confirmed signup must occupy exactly one seat and preference mismatches require an explicit acknowledgement bound to current versions. Final corrections do not change signups or run promotions."
     }
   },
   "management_errors": [
@@ -267,7 +299,8 @@
     "SEASON_NOT_OPEN",
     "BINDING_LOCKED"
   ],
-  "signup_errors": ["VERSION_CONFLICT", "PRACTICE_NOT_PUBLIC", "MEMBER_NOT_FOUND", "MEMBER_INACTIVE", "INVALID_PREFERENCE", "SIGNUP_EXISTS", "SIGNUP_NOT_ACTIVE", "SIGNUP_CLOSED", "PRACTICE_ENDED", "PRACTICE_CANCELLED", "SIGNUP_RATE_LIMITED", "SEAT_PLAN_REQUIRES_P3"],
+  "signup_errors": ["VERSION_CONFLICT", "PRACTICE_NOT_PUBLIC", "MEMBER_NOT_FOUND", "MEMBER_INACTIVE", "INVALID_PREFERENCE", "SIGNUP_EXISTS", "SIGNUP_NOT_ACTIVE", "SIGNUP_CLOSED", "PRACTICE_ENDED", "PRACTICE_CANCELLED", "SIGNUP_RATE_LIMITED", "ROLE_SIGNUP_CONFLICT"],
   "member_errors": ["MEMBER_HAS_ACTIVE_LINKS", "MEMBER_NOT_FOUND", "VERSION_CONFLICT"],
+  "seating_errors": ["VERSION_CONFLICT", "PRACTICE_NOT_PUBLIC", "PRACTICE_CANCELLED", "INVALID_SEAT_PLAN", "ROLE_SIGNUP_CONFLICT", "SEAT_MEMBER_NOT_CONFIRMED", "SEAT_PLAN_INCOMPLETE", "PREFERENCE_ACK_REQUIRED", "SEAT_PLAN_FROZEN"],
   "p2_write_protocol": "POST timeout is 30 seconds. Freeze request_id and all business parameters while the result is unknown. Completed requests return the original result even after later state changes; GET practice afterwards for current state. Unfinished plans recover under the shared script lock before subsequent reads/writes."
 }

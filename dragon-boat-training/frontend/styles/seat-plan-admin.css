@@ -1,0 +1,146 @@
+.dragon-boat-seat-editor > p,
+.dragon-boat-seat-editor section > p {
+  color: var(--db-color-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.dragon-boat-seat-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin: 1rem 0;
+}
+
+.dragon-boat-seat-role-grid label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--db-color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.dragon-boat-seat-role-grid select {
+  min-width: 0;
+  min-height: 2.75rem;
+  width: 100%;
+  border: 1px solid var(--db-color-border);
+  border-radius: var(--db-radius-control);
+  padding: 0.7rem;
+  color: var(--db-color-text);
+  background: var(--db-color-surface);
+  font: inherit;
+}
+
+.dragon-boat-seat-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.75fr) minmax(18rem, 1.35fr) minmax(14rem, 1fr);
+  align-items: start;
+  gap: 0.85rem;
+}
+
+.dragon-boat-seat-editor-layout > section {
+  min-width: 0;
+  border: 1px solid var(--db-color-border);
+  border-radius: var(--db-radius-control);
+  padding: 0.85rem;
+  background: var(--db-color-background);
+}
+
+.dragon-boat-seat-editor-layout h4 { margin: 0; }
+
+.dragon-boat-seat-pool [data-seat-pool] {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 29rem;
+  margin: 0.8rem 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.dragon-boat-seat-person,
+.dragon-boat-seat-target {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid var(--db-color-border);
+  border-radius: var(--db-radius-control);
+  padding: 0.5rem 0.6rem;
+  color: var(--db-color-text);
+  background: var(--db-color-surface);
+  font: inherit;
+  text-align: left;
+  touch-action: manipulation;
+  overflow-wrap: anywhere;
+}
+
+.dragon-boat-seat-person:not(:disabled),
+.dragon-boat-seat-target:not(:disabled) { cursor: pointer; }
+
+.dragon-boat-seat-person:disabled,
+.dragon-boat-seat-target:disabled { cursor: not-allowed; opacity: 0.7; }
+
+.dragon-boat-seat-person:focus-visible,
+.dragon-boat-seat-target:focus-visible,
+.dragon-boat-seat-role-grid select:focus-visible {
+  outline: 3px solid var(--db-color-primary-soft);
+  outline-offset: 2px;
+  border-color: var(--db-color-primary-strong);
+}
+
+.dragon-boat-seat-person span,
+.dragon-boat-seat-target span {
+  display: block;
+  color: var(--db-color-text-muted);
+  font-size: 0.68rem;
+}
+
+.dragon-boat-seat-person[aria-pressed="true"],
+.dragon-boat-seat-target[aria-pressed="true"] {
+  border-color: var(--db-color-primary-strong);
+  outline: 3px solid var(--db-color-primary-soft);
+}
+
+.dragon-boat-seat-draft-boat {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.8rem;
+}
+
+.dragon-boat-seat-draft-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1.7rem minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.dragon-boat-seat-draft-row > span {
+  align-self: center;
+  color: var(--db-color-text-muted);
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+.dragon-boat-seat-target { text-align: center; }
+.dragon-boat-seat-published .dragon-boat-seat-plan-boat { padding-inline: 0.2rem; }
+.dragon-boat-seat-published .dragon-boat-seat-plan-table { border-spacing: 0.2rem; }
+.dragon-boat-seat-published .dragon-boat-seat-plan-table td { padding-inline: 0.25rem; }
+
+@media (max-width: 64rem) {
+  .dragon-boat-seat-editor-layout { grid-template-columns: minmax(10rem, 0.75fr) minmax(18rem, 1.25fr); }
+  .dragon-boat-seat-published { grid-column: 1 / -1; }
+}
+
+@media (max-width: 42rem) {
+  .dragon-boat-seat-role-grid,
+  .dragon-boat-seat-editor-layout { grid-template-columns: 1fr; }
+  .dragon-boat-seat-published { grid-column: auto; }
+  .dragon-boat-seat-editor .dragon-boat-button-row { align-items: stretch; flex-direction: column; }
+  .dragon-boat-seat-editor .dragon-boat-button-row button { width: 100%; }
+  .dragon-boat-seat-pool [data-seat-pool] { max-height: 16rem; }
+}
+
+@media (pointer: coarse) {
+  .dragon-boat-seat-person,
+  .dragon-boat-seat-target { min-height: 3rem; }
+}

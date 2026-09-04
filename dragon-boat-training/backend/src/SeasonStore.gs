@@ -135,7 +135,13 @@ function getSeasonSheet_(season, sheetName) {
   if (dragonBoatStoreHandles_ && dragonBoatStoreHandles_[cacheKey]) return dragonBoatStoreHandles_[cacheKey];
   var headers = DRAGON_BOAT_RUNTIME_SHEET_HEADERS_[sheetName];
   if (!headers) throw new Error("Unknown season sheet: " + sheetName);
-  var sheet = getSeasonSpreadsheet_(season).getSheetByName(sheetName);
+  var spreadsheet = getSeasonSpreadsheet_(season);
+  var sheet = spreadsheet.getSheetByName(sheetName);
+  // P3 adds only new runtime tabs, so existing initialized seasons can upgrade
+  // lazily without changing or rewriting any deployed P0-P2 header.
+  if (!sheet && ["SeatPlanState", "SeatPlanRevisions", "PracticeFinalSnapshots"].indexOf(sheetName) >= 0) {
+    sheet = spreadsheet.insertSheet(sheetName);
+  }
   if (!sheet) {
     throw dragonBoatRequestError_("SEASON_NOT_INITIALIZED", "The season data store is not initialized.");
   }

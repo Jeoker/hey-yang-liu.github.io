@@ -1,0 +1,165 @@
+.dragon-boat-seat-plan-panel {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--db-color-border);
+  padding-top: 1.25rem;
+}
+
+.dragon-boat-seat-plan-panel h3 { margin: 0; }
+
+.dragon-boat-seat-plan-empty {
+  margin: 0.85rem 0 0;
+  border: 1px dashed var(--db-color-border);
+  border-radius: var(--db-radius-control);
+  padding: 1rem;
+  color: var(--db-color-text-muted);
+  background: var(--db-color-background);
+  line-height: 1.65;
+}
+
+.dragon-boat-seat-plan-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.8rem;
+  margin-top: 0.85rem;
+  color: var(--db-color-text-muted);
+  font-size: 0.8rem;
+}
+
+.dragon-boat-seat-plan-badge {
+  border-radius: 999px;
+  padding: 0.35rem 0.65rem;
+  color: var(--db-color-secondary-strong);
+  background: var(--db-color-secondary-soft);
+  font-size: 0.76rem;
+}
+
+.dragon-boat-seat-plan-roles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0.85rem 0 0;
+}
+
+.dragon-boat-seat-plan-roles > div {
+  min-width: 0;
+  border: 1px solid var(--db-color-border);
+  border-radius: var(--db-radius-control);
+  padding: 0.75rem 0.85rem;
+  background: var(--db-color-background);
+}
+
+.dragon-boat-seat-plan-roles dt {
+  color: var(--db-color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dragon-boat-seat-plan-roles dd {
+  margin: 0.25rem 0 0;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.dragon-boat-seat-plan-boat {
+  max-width: 38rem;
+  margin: 1rem auto 0;
+  border: 1px solid var(--db-color-border);
+  border-radius: 46% 46% var(--db-radius-panel) var(--db-radius-panel) / 2.25rem 2.25rem var(--db-radius-panel) var(--db-radius-panel);
+  padding: 1.25rem clamp(0.45rem, 2vw, 1rem) 1rem;
+  background: linear-gradient(180deg, var(--db-color-primary-soft), var(--db-color-surface) 14%, var(--db-color-surface));
+}
+
+.dragon-boat-seat-plan-direction {
+  margin: 0;
+  color: var(--db-color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+.dragon-boat-seat-plan-direction:last-child { margin-top: 0.65rem; }
+
+.dragon-boat-seat-plan-table {
+  width: 100%;
+  margin-top: 0.65rem;
+  border-collapse: separate;
+  border-spacing: 0.35rem;
+  table-layout: fixed;
+}
+
+.dragon-boat-seat-plan-table thead th {
+  padding: 0.35rem;
+  color: var(--db-color-primary-strong);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.dragon-boat-seat-plan-table .dragon-boat-seat-plan-row-heading,
+.dragon-boat-seat-plan-table tbody th { width: 2.25rem; }
+
+.dragon-boat-seat-plan-table tbody th {
+  color: var(--db-color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.dragon-boat-seat-plan-table td {
+  min-width: 0;
+  height: 3.25rem;
+  border: 1px solid var(--db-color-border);
+  border-radius: var(--db-radius-control);
+  padding: 0.55rem 0.45rem;
+  background: var(--db-color-background);
+  text-align: center;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.dragon-boat-seat-plan-table td strong,
+.dragon-boat-seat-plan-table td span { display: block; }
+
+.dragon-boat-seat-plan-table td strong { font-size: 0.86rem; }
+
+.dragon-boat-seat-plan-preference,
+.dragon-boat-seat-plan-open-seat {
+  margin-top: 0.18rem;
+  color: var(--db-color-text-muted);
+  font-size: 0.68rem;
+}
+
+.dragon-boat-seat-plan-open-seat { margin-top: 0; }
+
+.dragon-boat-seat-plan-correction {
+  margin: 0.85rem 0 0;
+  color: var(--db-color-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.dragon-boat-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 42rem) {
+  .dragon-boat-seat-plan-panel .dragon-boat-section-heading { align-items: flex-start; }
+  .dragon-boat-seat-plan-roles { grid-template-columns: 1fr; }
+  .dragon-boat-seat-plan-boat { padding-inline: 0.25rem; }
+  .dragon-boat-seat-plan-table { border-spacing: 0.22rem; }
+  .dragon-boat-seat-plan-table td { min-height: 2.75rem; padding: 0.48rem 0.3rem; }
+  .dragon-boat-seat-plan-table td strong { font-size: 0.78rem; }
+  .dragon-boat-seat-plan-table .dragon-boat-seat-plan-row-heading,
+  .dragon-boat-seat-plan-table tbody th { width: 1.6rem; }
+}

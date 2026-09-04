@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validPracticeView, olderPracticeView, usableRoster } from "../frontend/lib/current-view.js";
+import { validPracticeView, validSeatPlanView, olderPracticeView, usableRoster } from "../frontend/lib/current-view.js";
 
 const snapshot = () => ({ season_id: "s1", practice: { practice_id: "p1", practice_version: 2 },
   signup_version: 4, roster_version: 6, binding_version: 1, signup_open: true, counts: {}, signups: [],
@@ -23,6 +23,21 @@ test("late responses cannot downgrade any version or reopen a time-closed view",
   assert.equal(olderPracticeView({ ...current, generated_at: "2026-09-02T11:59:59Z" }, current), true);
   assert.equal(olderPracticeView({ ...current, signup_version: 5 }, current), false);
   assert.equal(olderPracticeView({ ...current, season_id: "s2", signup_version: 1 }, current), false);
+});
+
+test("seat plan versions participate in practice validation and late-response rejection", () => {
+  const seatPlan = { status: "PUBLISHED", mode: "UPCOMING", seat_plan_version: 3,
+    published_revision: 2, rows: [] };
+  const current = { ...snapshot(), seat_plan: seatPlan };
+  assert.equal(validPracticeView(current, "s1", "p1"), true);
+  assert.equal(validSeatPlanView(seatPlan), true);
+  assert.equal(validPracticeView({ ...current, seat_plan: { ...seatPlan, seat_plan_version: "3" } }, "s1", "p1"), false);
+  assert.equal(validPracticeView({ ...current, seat_plan: { ...seatPlan, rows: null } }, "s1", "p1"), false);
+  assert.equal(olderPracticeView({ ...current, seat_plan: undefined }, current), true);
+  assert.equal(olderPracticeView({ ...current, seat_plan: { ...seatPlan, seat_plan_version: 2 } }, current), true);
+  assert.equal(olderPracticeView({ ...current, seat_plan: { ...seatPlan, published_revision: 1 } }, current), true);
+  assert.equal(olderPracticeView({ ...current, seat_plan: { ...seatPlan, published_revision: 3 } }, current), false);
+  assert.equal(olderPracticeView({ ...snapshot(), seat_plan: seatPlan }, snapshot()), false);
 });
 
 test("roster reuse stops at the absolute expiry and every season/version boundary", () => {

@@ -1,14 +1,19 @@
-// P2 plans are persisted before the first business write. Recovery applies the
-// same values, including queue time and versions, rather than recalculating them.
+// Business plans are persisted before the first write. The historical function
+// name remains because deployed signup request scopes intentionally stay P2.
 function recoverP2Requests_() {
   var id = getScriptProperties_().getProperty(DRAGON_BOAT_PROPERTY_KEYS_.SYSTEM_SPREADSHEET_ID);
   if (!id) return;
   var spreadsheet = getSystemSpreadsheet_();
   if (!spreadsheet.getSheetByName("SystemRequests")) return;
   getSheetRecords_("SystemRequests").filter(function (record) {
-    return String(record.status) === "STARTED" && String(record.actor_id).indexOf("P2:") === 0;
+    var actor = String(record.actor_id);
+    return String(record.status) === "STARTED" &&
+      (actor.indexOf("P2:") === 0 || actor.indexOf("P3:") === 0 || actor.indexOf("P3_FREEZE:") === 0);
   }).forEach(function (record) {
-    applyP2Request_(record);
+    var saved = readSystemRequestResult_(record);
+    if (saved.kind === "P2") applyP2Request_(record);
+    else if (saved.kind === "P3") applyP3Request_(record);
+    else throw dragonBoatRequestError_("RECOVERY_REQUIRED", "A pending business change needs recovery.", true);
   });
 }
 
@@ -64,6 +69,7 @@ function applyP2Request_(record) {
     season.updated_at = plan.at;
     updateSheetRecord_("Seasons", season);
   }
+  applyP3SeatingPlanParts_(record, season, plan.seating);
   var eventId = deterministicEventId_(record, "P2_COMMITTED");
   if (!findSeasonSheetRecord_(season, "AuditLog", "event_id", eventId)) {
     appendSeasonSheetRecord_(season, "AuditLog", {
@@ -73,7 +79,8 @@ function applyP2Request_(record) {
       actor_type: plan.actor_type, actor_id: plan.actor_id,
       action: record.action, status: "SUCCEEDED",
       details_json: JSON.stringify({ before: plan.before, after: plan.member || plan.signups,
-        signup_state: plan.signup_state, promoted_member_ids: saved.result.promoted_member_ids || [] })
+        signup_state: plan.signup_state, promoted_member_ids: saved.result.promoted_member_ids || [],
+        seating_revision: plan.seating && plan.seating.revision ? plan.seating.revision.revision_number : null })
     });
   }
   SpreadsheetApp.flush();
@@ -154,10 +161,13 @@ function signupCounts_(rows, practice) {
   return result;
 }
 
-function canConfirmSignup_(preference, counts) {
+function canConfirmSignup_(preference, counts, seatAvailability) {
   return counts.confirmed < counts.total_capacity &&
     (preference !== "LEFT" || counts.left < counts.left_capacity) &&
-    (preference !== "RIGHT" || counts.right < counts.right_capacity);
+    (preference !== "RIGHT" || counts.right < counts.right_capacity) &&
+    (!seatAvailability || seatAvailability.some(function (slot) {
+      return !slot.claimed && seatMatchesSignupPreference_(slot.side, preference);
+    }));
 }
 
 function publicPractice_(request) {
@@ -173,6 +183,7 @@ function publicPractice_(request) {
     var roster = getPublicRosterSnapshot_(season, true);
     roster.members.forEach(function (member) { names[member.member_id] = member.display_name; });
     var waitlistPosition = 0;
+    var seatPlan = publicSeatPlanProjection_(season, practice);
     return {
       season_id: String(season.season_id), generated_at: new Date().toISOString(), practice: practiceProjection_(practice),
       signup_version: state.version, roster_version: Number(season.roster_version),
@@ -181,6 +192,7 @@ function publicPractice_(request) {
       management_signup_open: !signupClosedReason_(season, practice, true),
       closed_reason: signupClosedReason_(season, practice, false),
       counts: signupCounts_(rows, practice),
+      seat_plan: seatPlan,
       signups: rows.map(function (row) {
         var projected = signupProjection_(row);
         projected.display_name = names[row.member_id] || "已停用队员";
@@ -231,10 +243,10 @@ function mutateSignup_(request) {
     var state = getSignupState_(season, practiceId);
     requireVersion_(practice.practice_version, request.practice_version, "training");
     requireVersion_(state.version, request.signup_version, "signup list");
-    // P3 replaces this guard with the shared seat/role revision transition.
-    if (getSeasonSheetRecords_(season, "SeatPlanCurrent").some(function (seat) {
-      return String(seat.practice_id) === practiceId && Boolean(seat.member_id);
-    })) throw dragonBoatRequestError_("SEAT_PLAN_REQUIRES_P3", "Existing seating requires the seating integration before signup changes.");
+    var roleMembers = seatPlanRoleMemberIds_(season, practice);
+    if (!cancel && roleMembers[memberId]) {
+      throw dragonBoatRequestError_("ROLE_SIGNUP_CONFLICT", "A Coach or Steerer cannot also hold a training signup.");
+    }
     if (!management) enforcePublicSignupRateLimit_(season.season_id, memberId);
     var rows = getPracticeSignups_(season, practiceId);
     var before = JSON.parse(JSON.stringify(rows));
@@ -259,10 +271,14 @@ function mutateSignup_(request) {
       target.updated_at = now;
       target.last_request_id = request.request_id;
       var eligible = {};
-      getSeasonSheetRecords_(season, "Members").forEach(function (row) { eligible[row.member_id] = row.status === "ACTIVE"; });
+      getSeasonSheetRecords_(season, "Members").forEach(function (row) {
+        eligible[row.member_id] = row.status === "ACTIVE" && !roleMembers[row.member_id];
+      });
       var counts = signupCounts_(rows, practice);
+      var seatAvailability = signupSeatAvailability_(season, practice, rows, memberId);
       rows.filter(function (row) { return row.status === "WAITLISTED"; }).sort(compareSignupQueue_).forEach(function (row) {
-        if (eligible[row.member_id] && canConfirmSignup_(row.preference, counts)) {
+        if (eligible[row.member_id] && canConfirmSignup_(row.preference, counts, seatAvailability) &&
+            claimSignupSeat_(seatAvailability, row.preference)) {
           row.status = "CONFIRMED";
           row.updated_at = now;
           row.last_request_id = request.request_id;
@@ -283,10 +299,16 @@ function mutateSignup_(request) {
     }).map(function (row) { return String(row.member_id); });
     var result = { season_id: String(season.season_id), practice_id: practiceId,
       signup_version: state.version, signup: signupProjection_(target), promoted_member_ids: promoted };
+    var seating = noChange ? null : buildSignupSeatingTransition_(season, practice, request, scope,
+      beforeByMember[memberId] || null, target, promoted, actorId, now);
+    if (seating) {
+      result.seat_plan_version = Number(seating.state.seat_plan_version || 0);
+      result.published_revision = Number(seating.state.published_revision || 0);
+    }
     var committed = persistP2Request_(scope, request, digest, {
       season_id: String(season.season_id), practice_id: practiceId, at: now,
       actor_type: management ? "COACH" : "ANONYMOUS", actor_id: actorId,
-      signups: changed, signup_state: noChange ? null : state,
+      signups: changed, signup_state: noChange ? null : state, seating: seating,
       before: changed.map(function (row) { return beforeByMember[row.member_id] || null; })
     }, result);
     return attachP21View_(request, committed, management);
@@ -307,6 +329,10 @@ function attachP21View_(request, result, management) {
     if (management) {
       var links = allMemberActiveLinks_(season);
       view.member_links = links;
+      if (practiceId) {
+        var managedPractice = requirePublicPractice_(season, practiceId);
+        view.seating = seatingWorkspaceInternal_(season, managedPractice);
+      }
       if (request.known_roster_version !== Number(season.roster_version)) {
         view.members = getSeasonSheetRecords_(season, "Members").map(function (member) {
           return memberManagementProjection_(season, member, links[member.member_id] || []);

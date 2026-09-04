@@ -359,18 +359,29 @@ test("P2 management signup requires its own authenticated action and cannot bypa
   expectError(fixture.mutate("cancelSignupByCoach", 0), "SESSION_REVOKED");
 });
 
-test("P2 refuses signup changes when a seating plan needs the deferred P3 transition", async () => {
+test("P3 replaces the deferred seating guard with a draft-aware signup transition", async () => {
   const fixture = await createFixture();
   expectSuccess(fixture.mutate("signup", 0, "LEFT"));
-  const before = fixture.signupRows();
   fixture.backend.context.appendSeasonSheetRecord_(fixture.storedSeason(), "SeatPlanCurrent", {
     season_id: fixture.season.season_id, practice_id: fixture.practice.practice_id,
     row_number: 1, side: "LEFT", member_id: fixture.members[0].member_id, seat_plan_version: 1
   });
-  expectError(fixture.mutate("updateSignup", 0, "RIGHT"), "SEAT_PLAN_REQUIRES_P3");
-  expectError(fixture.mutate("cancelSignupByCoach", 0), "SEAT_PLAN_REQUIRES_P3");
-  expectError(fixture.mutate("signup", 1), "SEAT_PLAN_REQUIRES_P3");
-  assert.deepEqual(fixture.signupRows(), before);
+  const updated = expectSuccess(fixture.mutate("updateSignup", 0, "RIGHT"));
+  assert.equal(updated.signup.status, "CONFIRMED");
+  assert.equal(updated.signup.preference, "RIGHT");
+  assert.equal(
+    sheetRecords(fixture.binding.runtimeSpreadsheet, "SeatPlanCurrent")
+      .some((row) => row.member_id === fixture.members[0].member_id),
+    false,
+    "a now-incompatible legacy draft seat is cleared"
+  );
+  assert.equal(Number(sheetRecords(fixture.binding.runtimeSpreadsheet, "SeatPlanState")[0].seat_plan_version), 1);
+
+  const cancelled = expectSuccess(fixture.mutate("cancelSignupByCoach", 0));
+  assert.equal(cancelled.signup.status, "CANCELLED");
+  const replacement = expectSuccess(fixture.mutate("signup", 1, "LEFT"));
+  assert.equal(replacement.signup.status, "CONFIRMED");
+  assert.equal(fixture.signupRows().length, 2);
 });
 
 test("P2 member corrections invalidate the shared roster, survive sync, and do not alter existing signup preferences", async () => {

@@ -1,6 +1,6 @@
 var DRAGON_BOAT_CONTRACT_VERSION_ = "2026-09-02.p2.1";
 var DRAGON_BOAT_SERVICE_NAME_ = "dragon-boat-training";
-var DRAGON_BOAT_SERVICE_VERSION_ = "0.5.0-p2.1";
+var DRAGON_BOAT_SERVICE_VERSION_ = "0.6.0-p3";
 
 var DRAGON_BOAT_PROPERTY_KEYS_ = {
   SYSTEM_SPREADSHEET_ID: "DRAGON_BOAT_SYSTEM_SPREADSHEET_ID",
@@ -167,6 +167,20 @@ var DRAGON_BOAT_RUNTIME_SHEET_HEADERS_ = {
   SeatPlanCurrent: [
     "season_id", "practice_id", "row_number", "side", "member_id",
     "seat_plan_version", "updated_by", "updated_at"
+  ],
+  SeatPlanState: [
+    "season_id", "practice_id", "seat_plan_version", "coach_member_id",
+    "steerer_member_id", "published_revision", "frozen_revision",
+    "frozen_at", "updated_by", "updated_at"
+  ],
+  SeatPlanRevisions: [
+    "season_id", "practice_id", "revision_number", "revision_id", "source",
+    "seat_plan_version", "coach_member_id", "steerer_member_id", "seats_json",
+    "names_json", "published_by", "published_at", "request_id"
+  ],
+  PracticeFinalSnapshots: [
+    "season_id", "practice_id", "snapshot_id", "revision_number", "roles_json",
+    "seats_json", "names_json", "archive_due_at", "frozen_at", "status"
   ],
   AuditLog: [
     "event_id", "request_id", "server_time", "season_id", "entity_type",

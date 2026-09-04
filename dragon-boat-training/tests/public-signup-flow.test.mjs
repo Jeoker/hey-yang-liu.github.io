@@ -6,12 +6,13 @@ import ts from "typescript";
 import { DragonBoatApiError } from "../frontend/lib/api-client.js";
 import { validPracticeView, olderPracticeView, usableRoster } from "../frontend/lib/current-view.js";
 import { renderSignupList, signupPreferenceLabels, signupResultText } from "../frontend/lib/signup-view.js";
+import { isPublicSeatPlan, renderSeatPlan, seatPlanSourceLabel } from "../frontend/lib/seat-plan-view.js";
 
 const astroSource = await fs.readFile(new URL("../frontend/components/DragonBoatApp.astro", import.meta.url), "utf8");
 const script = astroSource.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;$/gm, "");
 const compiledScript = ts.transpileModule(script, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 
-function makeHarness({ post, readPractice, publishedPractices = [] } = {}) {
+function makeHarness({ post, readPractice, publishedPractices = [], seatPlan } = {}) {
   const elements = new Map();
   const documentListeners = new Map();
   const document = {
@@ -56,7 +57,8 @@ function makeHarness({ post, readPractice, publishedPractices = [] } = {}) {
     signups: [],
     failNextRead: false,
     season,
-    practice
+    practice,
+    seatPlan
   };
   const envelope = (data) => ({ data, meta: { server_time: new Date().toISOString(), contract_version: "test" } });
   class Client {
@@ -67,7 +69,7 @@ function makeHarness({ post, readPractice, publishedPractices = [] } = {}) {
         state.practiceReads++;
         if (readPractice) await readPractice(state);
         if (state.failNextRead) { state.failNextRead = false; throw new DragonBoatApiError("NETWORK_ERROR", "read failed", { retryable: true }); }
-        return envelope({ season_id: season.season_id, practice, roster_version: 1, binding_version: 1, signup_version: state.signupVersion, signup_open: true, closed_reason: "", counts: { confirmed: state.signups.length, waitlisted: 0, left: 0, ambient: state.signups.length, right: 0, total_capacity: 20, left_capacity: 10, right_capacity: 10 }, signups: state.signups });
+        return envelope({ season_id: season.season_id, practice, roster_version: 1, binding_version: 1, signup_version: state.signupVersion, signup_open: true, closed_reason: "", counts: { confirmed: state.signups.length, waitlisted: 0, left: 0, ambient: state.signups.length, right: 0, total_capacity: 20, left_capacity: 10, right_capacity: 10 }, signups: state.signups, ...(state.seatPlan ? { seat_plan: state.seatPlan } : {}) });
       }
       throw new Error(`Unexpected GET ${action}`);
     }
@@ -84,7 +86,8 @@ function makeHarness({ post, readPractice, publishedPractices = [] } = {}) {
     DragonBoatApiClient: Client, DragonBoatApiError,
     createRequestId: () => `request_${state.posts.length + 1}`,
     loadRosterSnapshot: () => null, saveRosterSnapshot() {},
-    renderSignupList, signupPreferenceLabels, signupResultText, validPracticeView, olderPracticeView, usableRoster
+    renderSignupList, signupPreferenceLabels, signupResultText, isPublicSeatPlan, renderSeatPlan, seatPlanSourceLabel,
+    validPracticeView, olderPracticeView, usableRoster
   });
   vm.runInContext(compiledScript, context);
   const element = (name) => {
@@ -101,6 +104,10 @@ async function settled(predicate) {
     await new Promise((resolve) => setImmediate(resolve));
   }
   assert.ok(predicate(), "UI did not reach the expected state");
+}
+
+function textOf(node) {
+  return [node.textContent, ...node.children.map(textOf)].filter(Boolean).join("\n");
 }
 
 async function selectAndConfirm(harness) {
@@ -152,6 +159,34 @@ test("public signup renders the committed current view without another practice 
   assert.equal(harness.state.posts.length, 1);
   assert.equal(harness.state.practiceReads, 1);
   assert.equal(harness.element("signup-preference").disabled, false);
+});
+
+test("public practice renders only the formal seat plan and accepts a newer mutation revision", async () => {
+  const originalPlan = { status: "PUBLISHED", mode: "UPCOMING", seat_plan_version: 1,
+    published_revision: 1, source: "COACH_PUBLISH", published_at: "2099-09-01T00:00:00Z",
+    correction_due_at: "2099-09-11T00:00:00Z", coach: { display_name: "Coach Liu" },
+    steerer: null, rows: [{ row_number: 1, left: { display_name: "Alice", preference: "LEFT" }, right: null }] };
+  const harness = makeHarness({ seatPlan: originalPlan, post: (state, _action, payload, _options, envelope) => {
+    state.signupVersion++;
+    state.signups = [{ member_id: payload.member_id, display_name: "Alice", preference: "AMBIENT", status: "CONFIRMED" }];
+    state.seatPlan = { ...originalPlan, seat_plan_version: 2, published_revision: 2,
+      source: "SYSTEM_PREFERENCE", rows: [{ row_number: 1, left: null, right: { display_name: "Bob", preference: "AMBIENT" } }] };
+    return envelope({ signup: state.signups[0], promoted_member_ids: ["member_bob"], view_status: "ready", current_view: {
+      season_id: state.season.season_id, season_status: "OPEN", roster_version: 1, binding_version: 1,
+      generated_at: new Date().toISOString(), practice: { season_id: state.season.season_id, practice: state.practice,
+        roster_version: 1, binding_version: 1, signup_version: state.signupVersion, signup_open: true,
+        counts: { confirmed: 1, total_capacity: 20, waitlisted: 0, left: 0, right: 0, ambient: 1 },
+        signups: state.signups, seat_plan: state.seatPlan }
+    } });
+  } });
+  await settled(() => textOf(harness.element("seat-plan-view")).includes("Revision 1"));
+  assert.match(textOf(harness.element("seat-plan-view")), /Alice/);
+  assert.match(textOf(harness.element("seat-plan-view")), /Coach Liu/);
+  await selectAndConfirm(harness);
+  await settled(() => textOf(harness.element("seat-plan-view")).includes("Revision 2"));
+  assert.match(textOf(harness.element("seat-plan-view")), /Bob/);
+  assert.doesNotMatch(textOf(harness.element("seat-plan-view")), /Alice/);
+  assert.equal(harness.state.practiceReads, 1);
 });
 
 test("a slow public refresh keeps fields editable and preserves a new side choice", async () => {
@@ -214,5 +249,5 @@ test("published cards distinguish cancelled and ended training before opening de
   assert.equal(cards[0].children[1].textContent, "已取消 · 报名只读");
   assert.equal(cards[1].children[1].textContent, "已结束 · 报名只读");
   assert.equal(cards[2].children[1].textContent, "已发布 · 查看最新报名状态");
-  assert.ok(cards.every((card) => card.children.at(-1).textContent === "查看报名与候补"));
+  assert.ok(cards.every((card) => card.children.at(-1).textContent === "查看报名、候补与座位"));
 });

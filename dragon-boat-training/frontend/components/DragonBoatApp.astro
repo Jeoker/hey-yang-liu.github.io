@@ -2,6 +2,7 @@
 import logoUrl from "../../assets/team-logo-placeholder.svg";
 import "../styles/app.css";
 import "../styles/signup.css";
+import "../styles/seat-plan.css";
 
 const basePath = import.meta.env.BASE_URL.endsWith("/")
   ? import.meta.env.BASE_URL
@@ -75,7 +76,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     <section class="dragon-boat-signup-panel" data-practice-panel hidden aria-labelledby="practice-detail-title">
       <div class="dragon-boat-section-heading">
         <div>
-          <p class="dragon-boat-session-label">单次训练报名</p>
+          <p class="dragon-boat-session-label">单次训练详情</p>
           <h2 id="practice-detail-title" data-practice-title tabindex="-1">正在读取训练</h2>
         </div>
         <button class="dragon-boat-secondary-button" type="button" data-refresh-practice>刷新本次训练</button>
@@ -85,6 +86,16 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       <p class="dragon-boat-signup-counts" data-practice-counts></p>
       <p class="dragon-boat-signup-warning" data-practice-closed hidden></p>
       <div data-signup-list></div>
+
+      <section class="dragon-boat-seat-plan-panel" data-seat-plan-section aria-labelledby="public-seat-plan-title">
+        <div class="dragon-boat-section-heading">
+          <div>
+            <p class="dragon-boat-session-label">公开排座</p>
+            <h3 id="public-seat-plan-title">正式座位表</h3>
+          </div>
+        </div>
+        <div data-seat-plan-view></div>
+      </section>
 
       <form class="dragon-boat-signup-form" data-signup-form hidden>
         <h3>选择自己的姓名</h3>
@@ -131,6 +142,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   import { DragonBoatApiClient, DragonBoatApiError, createRequestId } from "../lib/api-client.js";
   import { loadRosterSnapshot, saveRosterSnapshot } from "../lib/public-roster-cache.js";
   import { renderSignupList, signupPreferenceLabels, signupResultText } from "../lib/signup-view.js";
+  import { isPublicSeatPlan, renderSeatPlan, seatPlanSourceLabel } from "../lib/seat-plan-view.js";
   import { validPracticeView, olderPracticeView, usableRoster } from "../lib/current-view.js";
 
   const root = document.querySelector<HTMLElement>("[data-dragon-boat-app]");
@@ -160,6 +172,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const practiceCounts = root?.querySelector<HTMLElement>("[data-practice-counts]");
   const practiceClosed = root?.querySelector<HTMLElement>("[data-practice-closed]");
   const signupList = root?.querySelector<HTMLElement>("[data-signup-list]");
+  const seatPlanView = root?.querySelector<HTMLElement>("[data-seat-plan-view]");
   const signupForm = root?.querySelector<HTMLFormElement>("[data-signup-form]");
   const memberSearch = root?.querySelector<HTMLInputElement>("[data-member-search]");
   const memberSelect = root?.querySelector<HTMLSelectElement>("[data-member-select]");
@@ -276,10 +289,17 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
         }
         const cutoff = document.createElement("p");
         cutoff.textContent = `普通报名截止：${dateTime(practice.signup_cutoff_at, practice.timezone)}（${practice.timezone}）`;
+        if (practice.seat_plan) {
+          const seatState = document.createElement("p");
+          seatState.textContent = isPublicSeatPlan(practice.seat_plan)
+            ? `正式座位表 Revision ${practice.seat_plan.published_revision} · ${seatPlanSourceLabel(practice.seat_plan.source)}`
+            : "座位表尚未发布";
+          card.append(seatState);
+        }
         const entry = document.createElement("button");
         entry.type = "button";
         entry.className = "dragon-boat-secondary-button";
-        entry.textContent = "查看报名与候补";
+        entry.textContent = "查看报名、候补与座位";
         entry.dataset.practiceEntry = practice.practice_id;
         entry.addEventListener("click", () => openPractice(practice.practice_id, true));
         card.append(cutoff, entry);
@@ -398,6 +418,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     if (practiceCutoff) practiceCutoff.textContent = `普通报名截止：${dateTime(practice.signup_cutoff_at, practice.timezone)}。训练情况独立刷新，不等待名单缓存到期。`;
     if (practiceCounts) practiceCounts.textContent = `已确认 ${data.counts.confirmed} / ${data.counts.total_capacity} · 候补 ${data.counts.waitlisted} · Left ${data.counts.left} / Ambient ${data.counts.ambient} / Right ${data.counts.right}`;
     renderSignupList(signupList, data.signups);
+    renderSeatPlan(seatPlanView, data.seat_plan, { timeZone: practice.timezone });
     if (signupForm) signupForm.hidden = !roster || season?.status !== "OPEN";
     renderMemberOptions();
   }
@@ -456,6 +477,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     if (practiceCutoff) practiceCutoff.textContent = "";
     if (practiceCounts) practiceCounts.textContent = "";
     if (practiceClosed) practiceClosed.hidden = true;
+    seatPlanView?.replaceChildren();
     setSignupStatus("正在读取最新报名情况……");
     if (updateUrl) {
       const url = new URL(window.location.href);
@@ -569,7 +591,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
           MEMBER_NOT_FOUND: "本季名单中找不到该队员，请刷新后重新选择。",
           SIGNUP_EXISTS: "该队员已经报名，请核对最新状态后使用修改偏好。",
           SIGNUP_NOT_ACTIVE: "没有有效报名可供修改，请核对最新状态。",
-          SEAT_PLAN_REQUIRES_P3: "这次训练已有座位安排，当前阶段暂不能修改报名，请联系 Coach。"
+          SEAT_PLAN_REQUIRES_P3: "这次训练的座位安排正在更新，请刷新后重试，或联系 Coach 核对。"
         };
         let suffix = "";
         try { await readPractice(); } catch { practiceData = null; suffix = " 最新情况尚未读取，请先刷新训练。"; }

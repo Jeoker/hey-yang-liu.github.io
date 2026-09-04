@@ -408,7 +408,8 @@ function publishDueTrainingWeeks() {
         publishedCount += 1;
       });
     });
-    return { published_count: publishedCount, checked_at: now.toISOString() };
+    var frozenCount = freezeDueSeatPlans_();
+    return { published_count: publishedCount, frozen_seat_plan_count: frozenCount, checked_at: now.toISOString() };
   });
 }
 
@@ -537,7 +538,8 @@ function practiceProjection_(practice) {
     right_capacity: Number(practice.right_capacity),
     practice_version: Number(practice.practice_version || 0),
     schedule_published_at: String(practice.schedule_published_at || ""),
-    cancelled: Boolean(practice.cancelled_at)
+    cancelled: Boolean(practice.cancelled_at),
+    archive_due_at: seatPlanArchiveDueAt_(practice)
   };
 }
 

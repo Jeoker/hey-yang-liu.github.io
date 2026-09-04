@@ -5,14 +5,17 @@ import vm from "node:vm";
 import ts from "typescript";
 import { DragonBoatApiError } from "../frontend/lib/api-client.js";
 import { validPracticeView, olderPracticeView } from "../frontend/lib/current-view.js";
+import { renderSeatPlan } from "../frontend/lib/seat-plan-view.js";
 import { renderSignupList, signupResultText } from "../frontend/lib/signup-view.js";
 
 const source = await fs.readFile(new URL("../frontend/components/CoachModeApp.astro", import.meta.url), "utf8");
 const script = source.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;$/gm, "");
 const compiled = ts.transpileModule(script, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 
-function makeHarness({ mutate, readWorkspace } = {}) {
+function makeHarness({ mutate, readWorkspace, seating = false } = {}) {
   const elements = new Map();
+  const timers = new Map();
+  let timerCounter = 0;
   const document = { querySelector: (selector) => elements.get(selector), createElement: (tag) => new Element(tag) };
   class Element {
     constructor(tag) {
@@ -23,6 +26,7 @@ function makeHarness({ mutate, readWorkspace } = {}) {
       this.fields = new Map();
       this.elements = { namedItem: (name) => this.fields.get(name) };
       this.dataset = {};
+      this.attributes = new Map();
       this.value = "";
       this.defaultValue = "";
       this.textContent = "";
@@ -34,9 +38,10 @@ function makeHarness({ mutate, readWorkspace } = {}) {
     replaceChildren(...children) { this.children = children; }
     querySelector(selector) { return elements.get(selector); }
     querySelectorAll() { return []; }
-    getAttribute(key) { return key === "data-api-url" ? "http://localhost:4322/api" : ""; }
+    getAttribute(key) { return key === "data-api-url" ? "http://localhost:4322/api" : this.attributes.get(key) || ""; }
+    setAttribute(key, value) { this.attributes.set(key, String(value)); }
     addEventListener(event, handler) { this.listeners.set(event, handler); }
-    emit(event) { return this.listeners.get(event)?.({ preventDefault() {} }); }
+    emit(event, values = {}) { return this.listeners.get(event)?.({ preventDefault() {}, ...values }); }
     reset() { for (const field of this.fields.values()) field.value = field.defaultValue; }
     get selectedOptions() { return this.children.filter((child) => child.value === this.value); }
   }
@@ -55,11 +60,31 @@ function makeHarness({ mutate, readWorkspace } = {}) {
   }
   const season = { season_id: "season_test", name: "Test season", status: "OPEN", start_date: "2099-01-01", end_date: "2099-12-31", timezone: "America/New_York", roster_version: 1, season_version: 1, binding_version: 1 };
   const practice = { practice_id: "practice_test", practice_version: 1, timezone: "America/New_York", start_at: "2099-09-09T22:00:00Z", end_at: "2099-09-10T00:00:00Z", schedule_published_at: "2099-09-01T00:00:00Z", location: "Test Dock" };
+  const baseMembers = [
+    { member_id: "member_alice", display_name: "Alice", source_display_name: "Alice Source", display_name_override: "Alice", status: "ACTIVE", default_preference: "AMBIENT", member_version: 1, active_links: [] },
+    { member_id: "member_bob", display_name: "Bob", source_display_name: "Bob Source", display_name_override: "Bob", status: "ACTIVE", default_preference: "LEFT", member_version: 1, active_links: [] }
+  ];
   const state = {
     calls: [], requestCounter: 0, practiceReads: 0, failNextPracticeRead: false,
     signupVersion: 1, signups: [], season, practice,
-    members: [{ member_id: "member_alice", display_name: "Alice", source_display_name: "Alice Source", display_name_override: "Alice", status: "ACTIVE", default_preference: "AMBIENT", member_version: 1, active_links: [] }]
+    members: seating ? baseMembers : baseMembers.slice(0, 1),
+    seatVersion: 0, publishedRevision: 0,
+    seatDraft: { coach_member_id: "", steerer_member_id: "", seats: [] }
   };
+  if (seating) state.signups = state.members.map((member, index) => ({
+    member_id: member.member_id, display_name: member.display_name,
+    preference: index ? "LEFT" : "AMBIENT", status: "CONFIRMED",
+    queue_at: `2099-09-01T12:0${index}:00Z`, queue_sequence: index + 1
+  }));
+  state.seatingWorkspace = () => ({
+    season_id: season.season_id, practice_id: practice.practice_id, practice,
+    mode: "UPCOMING", editable: true, archive_due_at: "2099-09-11T00:00:00Z",
+    signup_version: state.signupVersion, seat_plan_version: state.seatVersion,
+    published_revision: state.publishedRevision, draft: structuredClone(state.seatDraft),
+    published: null, members: state.members, signups: state.signups,
+    unseated_member_ids: state.signups.filter((signup) => !state.seatDraft.seats.some((seat) => seat.member_id === signup.member_id)).map((signup) => signup.member_id),
+    preference_mismatches: []
+  });
   const envelope = (data) => ({ data: structuredClone(data) });
   class Client {
     async get(action) {
@@ -82,8 +107,10 @@ function makeHarness({ mutate, readWorkspace } = {}) {
         if (readWorkspace) await readWorkspace(state);
         return envelope({ season_id: season.season_id, season, practices: [practice],
         season_status: "OPEN", roster_version: season.roster_version, binding_version: 1,
-        members: state.members, member_links: {}, practice: (await this.get("practice")).data });
+        members: state.members, member_links: {}, practice: (await this.get("practice")).data,
+        ...(seating ? { seating: state.seatingWorkspace() } : {}) });
       }
+      if (action === "getSeatingWorkspace") return envelope(state.seatingWorkspace());
       if (action === "coachLogin") return envelope({ session_token: "session_new", session: { expires_at: "2099-12-31T00:00:00Z" } });
       if (action === "coachLogout") return envelope({});
       if (mutate) return mutate(state, action, payload, options, envelope);
@@ -95,18 +122,34 @@ function makeHarness({ mutate, readWorkspace } = {}) {
     entries() { return [...this.form.fields.entries()].map(([key, value]) => [key, value.value]); }
   }
   const context = vm.createContext({ document, Date, Intl, Error, console, structuredClone, FormData: FormDataMock,
+    window: {
+      setTimeout(callback) { const id = ++timerCounter; timers.set(id, callback); return id; },
+      clearTimeout(id) { timers.delete(id); },
+      confirm: () => true
+    },
     DragonBoatApiClient: Client, DragonBoatApiError,
     createRequestId: () => `request_${++state.requestCounter}`,
     loadCoachSession: () => ({ token: "session_old" }), saveCoachSession() {}, clearCoachSession() {},
     isCoachSessionError: (error) => ["SESSION_INVALID", "SESSION_EXPIRED", "SESSION_REVOKED"].includes(error?.code),
-    renderSignupList, signupResultText, validPracticeView, olderPracticeView });
+    renderSignupList, signupResultText, renderSeatPlan, validPracticeView, olderPracticeView });
   vm.runInContext(compiled, context);
   const element = (name) => {
     const found = elements.get(`[data-${name}]`);
     assert.ok(found, `Missing control ${name}`);
     return found;
   };
-  return { state, element, mutationCalls: () => state.calls.filter((call) => /signupByCoach|SignupByCoach|Member|createSeason/.test(call.action) && !["listSeasonMembers", "getMemberWorkspace"].includes(call.action)) };
+  return {
+    state,
+    element,
+    async flushTimers() {
+      const callbacks = [...timers.values()];
+      timers.clear();
+      callbacks.forEach((callback) => callback());
+      await new Promise((resolve) => setImmediate(resolve));
+    },
+    mutationCalls: () => state.calls.filter((call) => /signupByCoach|SignupByCoach|Member|createSeason/.test(call.action) && !["listSeasonMembers", "getMemberWorkspace"].includes(call.action)),
+    seatCalls: () => state.calls.filter((call) => ["saveSeatPlanDraft", "publishSeatPlan"].includes(call.action))
+  };
 }
 
 async function settled(predicate) {
@@ -121,6 +164,42 @@ async function ready(harness) {
   await settled(() => harness.element("season-picker").value === "season_test");
   if (!harness.element("member-console-status").textContent.includes("名册与报名已更新")) await harness.element("open-members").emit("click");
   await settled(() => harness.element("member-console-status").textContent.includes("名册与报名已更新"));
+}
+
+async function readySeating(harness) {
+  await ready(harness);
+  await settled(() => !harness.element("seat-console").hidden && harness.element("seat-draft-grid").children.length === 10);
+}
+
+function poolButton(harness, memberId) {
+  const button = harness.element("seat-pool").children.find((child) => child.dataset.memberId === memberId);
+  assert.ok(button, `Missing pool member ${memberId}`);
+  return button;
+}
+
+function seatTarget(harness, rowIndex, side) {
+  const row = harness.element("seat-draft-grid").children[rowIndex - 1];
+  assert.ok(row, `Missing seat row ${rowIndex}`);
+  return row.children[side === "LEFT" ? 0 : 2];
+}
+
+function seatOccupantName(harness, rowIndex, side) {
+  return seatTarget(harness, rowIndex, side).children[0]?.textContent || "";
+}
+
+function placeFromPool(harness, memberId, rowIndex, side) {
+  poolButton(harness, memberId).emit("click");
+  seatTarget(harness, rowIndex, side).emit("click");
+}
+
+function acceptSeatSave(state, payload, envelope) {
+  state.seatVersion++;
+  state.seatDraft = {
+    coach_member_id: payload.coach_member_id,
+    steerer_member_id: payload.steerer_member_id,
+    seats: structuredClone(payload.seats)
+  };
+  return envelope(state.seatingWorkspace());
 }
 
 async function submitSignup(harness) {
@@ -309,4 +388,124 @@ test("P1 pending writes reject changed inputs and replay the original payload", 
   await settled(() => harness.element("management-status").textContent.includes("原操作已由服务器确认成功"));
   assert.equal(writes, 2);
   assert.deepEqual(harness.mutationCalls()[0], harness.mutationCalls()[1]);
+});
+
+test("Coach seat autosave keeps later local edits and rebases the next save", async () => {
+  let releaseFirst;
+  let writes = 0;
+  const harness = makeHarness({ seating: true, mutate: (state, action, payload, _options, envelope) => {
+    assert.equal(action, "saveSeatPlanDraft");
+    if (++writes === 1) return new Promise((resolve) => {
+      releaseFirst = () => resolve(acceptSeatSave(state, payload, envelope));
+    });
+    return acceptSeatSave(state, payload, envelope);
+  } });
+  await readySeating(harness);
+  placeFromPool(harness, "member_alice", 1, "LEFT");
+  await harness.flushTimers();
+  await settled(() => harness.seatCalls().length === 1);
+
+  placeFromPool(harness, "member_bob", 1, "RIGHT");
+  assert.equal(seatOccupantName(harness, 1, "RIGHT"), "Bob", "editing stays available during the slow Google write");
+  releaseFirst();
+  await settled(() => harness.element("seat-status").textContent.includes("刚才继续做出的调整"));
+  await harness.flushTimers();
+  await settled(() => harness.seatCalls().length === 2 && harness.element("seat-status").textContent.includes("服务器保存"));
+
+  const [first, second] = harness.seatCalls();
+  assert.equal(first.payload.seat_plan_version, 0);
+  assert.equal(first.payload.seats.length, 1);
+  assert.equal(second.payload.seat_plan_version, 1);
+  assert.equal(second.payload.seats.length, 2);
+  assert.notEqual(first.options.requestId, second.options.requestId);
+});
+
+test("uncertain seat save retries the frozen request before saving newer edits", async () => {
+  let rejectFirst;
+  let writes = 0;
+  const harness = makeHarness({ seating: true, mutate: (state, action, payload, _options, envelope) => {
+    assert.equal(action, "saveSeatPlanDraft");
+    writes++;
+    if (writes === 1) return new Promise((_resolve, reject) => {
+      rejectFirst = () => reject(new DragonBoatApiError("REQUEST_TIMEOUT", "unknown", { retryable: true }));
+    });
+    return acceptSeatSave(state, payload, envelope);
+  } });
+  await readySeating(harness);
+  placeFromPool(harness, "member_alice", 1, "LEFT");
+  await harness.flushTimers();
+  await settled(() => harness.seatCalls().length === 1);
+  placeFromPool(harness, "member_bob", 1, "RIGHT");
+  rejectFirst();
+  await settled(() => !harness.element("seat-retry").hidden);
+  assert.equal(seatOccupantName(harness, 1, "RIGHT"), "Bob");
+
+  await harness.element("seat-retry").emit("click");
+  await settled(() => harness.element("seat-status").textContent.includes("刚才继续做出的调整"));
+  await harness.flushTimers();
+  await settled(() => harness.seatCalls().length === 3 && harness.element("seat-status").textContent.includes("服务器保存"));
+
+  const [first, retry, newer] = harness.seatCalls();
+  assert.deepEqual(first, retry, "unknown result must reuse the exact request ID and payload");
+  assert.equal(newer.payload.seat_plan_version, 1);
+  assert.equal(newer.payload.seats.length, 2, "retrying the old snapshot must not erase the later local seat");
+  assert.notEqual(newer.options.requestId, retry.options.requestId);
+});
+
+test("seat version conflict preserves local draft until a fresh server draft is adopted", async () => {
+  const harness = makeHarness({ seating: true, mutate: (state, action, _payload, _options, _envelope) => {
+    assert.equal(action, "saveSeatPlanDraft");
+    state.seatVersion = 1;
+    state.seatDraft = { coach_member_id: "", steerer_member_id: "", seats: [
+      { row_number: 1, side: "LEFT", member_id: "member_bob" }
+    ] };
+    throw new DragonBoatApiError("VERSION_CONFLICT", "changed");
+  } });
+  await readySeating(harness);
+  placeFromPool(harness, "member_alice", 1, "LEFT");
+  await harness.flushTimers();
+  await settled(() => harness.element("seat-status").textContent.includes("本地草稿仍保留"));
+
+  assert.equal(seatOccupantName(harness, 1, "LEFT"), "Alice");
+  assert.equal(harness.element("seat-reset").disabled, true);
+  assert.equal(harness.element("seat-reset").textContent, "请先刷新服务器草稿");
+  await harness.element("seat-refresh").emit("click");
+  await settled(() => harness.element("seat-reset").textContent === "采用服务器草稿");
+  assert.equal(seatOccupantName(harness, 1, "LEFT"), "Alice", "refresh must not overwrite the conflicted local draft");
+  assert.equal(harness.element("seat-reset").disabled, false);
+
+  harness.element("seat-reset").emit("click");
+  assert.equal(seatOccupantName(harness, 1, "LEFT"), "Bob");
+  assert.match(harness.element("seat-status").textContent, /本地冲突版本没有提交/);
+});
+
+test("late seat save response after logout cannot restore private seating UI", async () => {
+  let releaseWrite;
+  const harness = makeHarness({ seating: true, mutate: (state, action, payload, _options, envelope) => {
+    assert.equal(action, "saveSeatPlanDraft");
+    return new Promise((resolve) => {
+      releaseWrite = () => resolve(acceptSeatSave(state, payload, envelope));
+    });
+  } });
+  await readySeating(harness);
+  placeFromPool(harness, "member_alice", 1, "LEFT");
+  await harness.flushTimers();
+  await settled(() => harness.seatCalls().length === 1);
+  await harness.element("logout-button").emit("click");
+  releaseWrite();
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(harness.element("seat-console").hidden, true);
+  assert.equal(harness.element("seat-pool").children.length, 0);
+  assert.equal(harness.element("seat-draft-grid").children.length, 0);
+  assert.equal(harness.element("seat-status").textContent, "");
+});
+
+test("seat editor CSS keeps touch targets and a single-column mobile workflow", async () => {
+  const css = await fs.readFile(new URL("../frontend/styles/seat-plan-admin.css", import.meta.url), "utf8");
+  assert.match(css, /min-height:\s*2\.75rem/);
+  assert.match(css, /@media \(pointer:\s*coarse\)[\s\S]*min-height:\s*3rem/);
+  assert.match(css, /@media \(max-width:\s*42rem\)[\s\S]*grid-template-columns:\s*1fr/);
+  assert.match(css, /touch-action:\s*manipulation/);
 });

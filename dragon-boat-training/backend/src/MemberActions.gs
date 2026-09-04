@@ -9,6 +9,9 @@ function allMemberActiveLinks_(season) {
   function add(row, kind) {
     if (!row.member_id || !practices[row.practice_id]) return;
     if (!links[row.member_id]) links[row.member_id] = [];
+    if (links[row.member_id].some(function (link) {
+      return link.practice_id === String(row.practice_id) && link.kind === kind;
+    })) return;
     links[row.member_id].push({ practice_id: String(row.practice_id), start_at: String(practices[row.practice_id].start_at), kind: kind });
   }
   getSeasonSheetRecords_(season, "SignupsCurrent").forEach(function (row) {
@@ -16,6 +19,17 @@ function allMemberActiveLinks_(season) {
   });
   getSeasonSheetRecords_(season, "SeatPlanCurrent").forEach(function (row) {
     add(row, "SEAT");
+  });
+  getSeasonSheetRecords_(season, "SeatPlanState").forEach(function (row) {
+    if (row.coach_member_id) add({ practice_id: row.practice_id, member_id: row.coach_member_id }, "COACH");
+    if (row.steerer_member_id) add({ practice_id: row.practice_id, member_id: row.steerer_member_id }, "STEERER");
+    var published = getSeatPlanRevision_(season, row.practice_id, row.published_revision);
+    if (published && published.coach_member_id) {
+      add({ practice_id: row.practice_id, member_id: published.coach_member_id }, "COACH");
+    }
+    if (published && published.steerer_member_id) {
+      add({ practice_id: row.practice_id, member_id: published.steerer_member_id }, "STEERER");
+    }
   });
   return links;
 }
@@ -50,6 +64,9 @@ function mutateMember_(request) {
   return withDragonBoatScriptLock_(function () {
     var auth = validateCoachSession_(requireRequestString_(request, "session_token", 32, 2048));
     var season = requireSeason_(request.season_id);
+    // Freeze due practices before a name correction can change the historical
+    // name that belonged at the end of the 24-hour correction window.
+    freezeDueSeatPlansForSeason_(season);
     var memberId = requireRequestString_(request, "member_id", 8, 128);
     var actorId = String(auth.coach.coach_id);
     var scope = "P2:" + season.season_id + ":COACH:" + actorId;
@@ -102,7 +119,9 @@ function getMemberWorkspace_(request) {
   return withDragonBoatScriptLock_(function () {
     validateCoachSession_(requireRequestString_(request, "session_token", 32, 2048));
     var season = requireSeason_(request.season_id);
-    ensureSeasonOpen_(season);
+    if (["OPEN", "COMPLETED"].indexOf(seasonEffectiveStatus_(season)) < 0) {
+      throw dragonBoatRequestError_("SEASON_NOT_OPEN", "The season management workspace is not available.");
+    }
     var published = publicBootstrap_({ season_id: season.season_id });
     var practices = [];
     published.weeks.forEach(function (week) { practices = practices.concat(week.practices); });
