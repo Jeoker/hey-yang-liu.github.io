@@ -174,7 +174,7 @@ function publicSeatPlanRows_(practice, seats, names) {
   return rows;
 }
 
-function publicSeatPlanProjection_(season, practice) {
+function seatPlanProjection_(season, practice, management) {
   var mode = seatingMode_(practice);
   if (mode === "FROZEN") ensurePracticeSeatPlanFrozen_(season, practice);
   var state = getSeatPlanState_(season, practice);
@@ -205,11 +205,19 @@ function publicSeatPlanProjection_(season, practice) {
     archive_due_at: seatPlanArchiveDueAt_(practice),
     published_at: revision ? String(revision.published_at || "") : "",
     source: revision ? String(revision.source || "") : "",
-    coach: seatPlanRoleProjection_(coachMemberId, names, false),
-    steerer: seatPlanRoleProjection_(steererMemberId, names, false),
+    coach: seatPlanRoleProjection_(coachMemberId, names, management === true),
+    steerer: seatPlanRoleProjection_(steererMemberId, names, management === true),
     seats: projectedSeats,
     rows: publicSeatPlanRows_(practice, seats, names)
   };
+}
+
+function publicSeatPlanProjection_(season, practice) {
+  return seatPlanProjection_(season, practice, false);
+}
+
+function managementSeatPlanProjection_(season, practice) {
+  return seatPlanProjection_(season, practice, true);
 }
 
 function seatingPreferenceMismatches_(season, practice, seats) {
@@ -516,7 +524,7 @@ function seatingWorkspaceInternal_(season, practice) {
       seats: occupiedSeatPlanSeats_(seats)
     },
     published: Number(state.published_revision || 0) || getPracticeFinalSnapshot_(season, practice.practice_id)
-      ? publicSeatPlanProjection_(season, practice) : null,
+      ? managementSeatPlanProjection_(season, practice) : null,
     members: members,
     signups: projectedSignups,
     unseated_member_ids: projectedSignups.filter(function (row) {

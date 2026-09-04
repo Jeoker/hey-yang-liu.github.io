@@ -1392,6 +1392,10 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       const newerEditsRemain = sentSequence < seatEditSequence && seatDirty;
       const publishedRevision = responseData.published_revision ?? responseData.seating?.published_revision ?? managedSeating?.published_revision;
       clearSeatPending();
+      // The response render happened while the accepted-write guard was still
+      // active. Render once more after clearing it so dynamic pool/seat buttons
+      // reflect the same unlocked state as the static controls.
+      renderSeatEditor();
       setStatus(seatStatus, action === "publishSeatPlan"
         ? `正式座位表已发布为 revision ${publishedRevision}。`
         : newerEditsRemain ? "较早的草稿版本已保存；刚才继续做出的调整即将自动保存。" : "私有排座草稿已由服务器保存。", newerEditsRemain ? "pending" : "ready");

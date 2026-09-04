@@ -62,16 +62,18 @@ function makeHarness({ mutate, readWorkspace, seating = false } = {}) {
   const practice = { practice_id: "practice_test", practice_version: 1, timezone: "America/New_York", start_at: "2099-09-09T22:00:00Z", end_at: "2099-09-10T00:00:00Z", schedule_published_at: "2099-09-01T00:00:00Z", location: "Test Dock" };
   const baseMembers = [
     { member_id: "member_alice", display_name: "Alice", source_display_name: "Alice Source", display_name_override: "Alice", status: "ACTIVE", default_preference: "AMBIENT", member_version: 1, active_links: [] },
-    { member_id: "member_bob", display_name: "Bob", source_display_name: "Bob Source", display_name_override: "Bob", status: "ACTIVE", default_preference: "LEFT", member_version: 1, active_links: [] }
+    { member_id: "member_bob", display_name: "Bob", source_display_name: "Bob Source", display_name_override: "Bob", status: "ACTIVE", default_preference: "LEFT", member_version: 1, active_links: [] },
+    { member_id: "member_alpha", display_name: "Alpha", source_display_name: "Alpha Source", display_name_override: "Alpha", status: "ACTIVE", default_preference: "AMBIENT", member_version: 1, active_links: [] }
   ];
   const state = {
     calls: [], requestCounter: 0, practiceReads: 0, failNextPracticeRead: false,
     signupVersion: 1, signups: [], season, practice,
     members: seating ? baseMembers : baseMembers.slice(0, 1),
     seatVersion: 0, publishedRevision: 0,
-    seatDraft: { coach_member_id: "", steerer_member_id: "", seats: [] }
+    seatDraft: { coach_member_id: "", steerer_member_id: "", seats: [] },
+    seatPublished: null
   };
-  if (seating) state.signups = state.members.map((member, index) => ({
+  if (seating) state.signups = state.members.slice(0, 2).map((member, index) => ({
     member_id: member.member_id, display_name: member.display_name,
     preference: index ? "LEFT" : "AMBIENT", status: "CONFIRMED",
     queue_at: `2099-09-01T12:0${index}:00Z`, queue_sequence: index + 1
@@ -81,7 +83,7 @@ function makeHarness({ mutate, readWorkspace, seating = false } = {}) {
     mode: "UPCOMING", editable: true, archive_due_at: "2099-09-11T00:00:00Z",
     signup_version: state.signupVersion, seat_plan_version: state.seatVersion,
     published_revision: state.publishedRevision, draft: structuredClone(state.seatDraft),
-    published: null, members: state.members, signups: state.signups,
+    published: structuredClone(state.seatPublished), members: state.members, signups: state.signups,
     unseated_member_ids: state.signups.filter((signup) => !state.seatDraft.seats.some((seat) => seat.member_id === signup.member_id)).map((signup) => signup.member_id),
     preference_mismatches: []
   });
@@ -418,6 +420,56 @@ test("Coach seat autosave keeps later local edits and rebases the next save", as
   assert.equal(second.payload.seat_plan_version, 1);
   assert.equal(second.payload.seats.length, 2);
   assert.notEqual(first.options.requestId, second.options.requestId);
+});
+
+test("successful seat autosave unlocks newly rendered pool and seat buttons", async () => {
+  const harness = makeHarness({ seating: true, mutate: (state, action, payload, _options, envelope) => {
+    assert.equal(action, "saveSeatPlanDraft");
+    return acceptSeatSave(state, payload, envelope);
+  } });
+  await readySeating(harness);
+  placeFromPool(harness, "member_alice", 1, "LEFT");
+  await harness.flushTimers();
+  await settled(() => harness.element("seat-status").textContent.includes("服务器保存"));
+
+  assert.equal(poolButton(harness, "member_bob").disabled, false,
+    "a pool button rendered from the accepted response must be usable immediately");
+  assert.equal(seatTarget(harness, 2, "RIGHT").disabled, false,
+    "all dynamic seat targets must be usable immediately after save");
+});
+
+test("reset to published restores both protected role IDs and published seats", async () => {
+  const harness = makeHarness({ seating: true });
+  harness.state.seatVersion = 2;
+  harness.state.publishedRevision = 1;
+  harness.state.seatDraft = {
+    coach_member_id: "",
+    steerer_member_id: "",
+    seats: [{ row_number: 1, side: "RIGHT", member_id: "member_bob" }]
+  };
+  harness.state.seatPublished = {
+    status: "PUBLISHED",
+    mode: "UPCOMING",
+    seat_plan_version: 1,
+    published_revision: 1,
+    published_at: "2099-09-02T12:00:00Z",
+    source: "MANUAL",
+    coach: { member_id: "member_alpha", display_name: "Alpha" },
+    steerer: { member_id: "member_alpha", display_name: "Alpha" },
+    seats: [{ row_number: 1, side: "LEFT", member_id: "member_bob", display_name: "Bob" }],
+    rows: [{ row_number: 1, left: { display_name: "Bob" }, right: null }]
+  };
+  await readySeating(harness);
+  assert.equal(seatOccupantName(harness, 1, "RIGHT"), "Bob");
+  assert.equal(harness.element("seat-coach").value, "");
+  assert.equal(harness.element("seat-steerer").value, "");
+
+  harness.element("seat-reset").emit("click");
+
+  assert.equal(seatOccupantName(harness, 1, "LEFT"), "Bob");
+  assert.equal(seatOccupantName(harness, 1, "RIGHT"), "空位");
+  assert.equal(harness.element("seat-coach").value, "member_alpha");
+  assert.equal(harness.element("seat-steerer").value, "member_alpha");
 });
 
 test("uncertain seat save retries the frozen request before saving newer edits", async () => {

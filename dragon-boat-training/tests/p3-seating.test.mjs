@@ -252,6 +252,13 @@ test("P3 keeps a Coach draft private and preserves immutable published revisions
   assert.equal(workspace.published_revision, 1);
   assert.equal(workspace.published.coach.display_name, "Member 03");
   assert.equal(workspace.published.steerer.display_name, "Member 03");
+  const protectedRevisionOne = fixture.workspace().published;
+  assert.deepEqual(protectedRevisionOne.coach, {
+    display_name: "Member 03", member_id: fixture.members[2].member_id
+  });
+  assert.deepEqual(protectedRevisionOne.steerer, {
+    display_name: "Member 03", member_id: fixture.members[2].member_id
+  });
   const firstRevision = structuredClone(
     sheetRecords(fixture.binding.runtimeSpreadsheet, "SeatPlanRevisions")[0]
   );
@@ -260,6 +267,8 @@ test("P3 keeps a Coach draft private and preserves immutable published revisions
   const publicRevisionOne = expectSuccess(fixture.get("practice", { practice_id: fixture.practiceId })).seat_plan;
   assert.equal(publicRevisionOne.status, "PUBLISHED");
   assert.equal(publicRevisionOne.published_revision, 1);
+  assert.deepEqual(publicRevisionOne.coach, { display_name: "Member 03" }, "public Coach role must not expose its management ID");
+  assert.deepEqual(publicRevisionOne.steerer, { display_name: "Member 03" }, "public Steerer role must not expose its management ID");
   assert.equal(findSeat(publicRevisionOne, 1, "LEFT").display_name, "Member 01");
   assert.equal(findSeat(publicRevisionOne, 1, "RIGHT").display_name, "Member 02");
   assert.equal(publicRevisionOne.rows.length, 10);
@@ -586,6 +595,13 @@ test("P3 final correction preserves signup history and closes exactly at the 24-
   fixture.setTime(archiveDueAt);
   const frozen = fixture.workspace();
   assert.equal(frozen.mode, "FROZEN");
+  assert.deepEqual(frozen.published.coach, {
+    display_name: "Member 04", member_id: fixture.members[3].member_id
+  });
+  assert.deepEqual(frozen.published.steerer, null);
+  const frozenPublic = expectSuccess(fixture.get("practice", { practice_id: fixture.practiceId })).seat_plan;
+  assert.deepEqual(frozenPublic.coach, { display_name: "Member 04" });
+  assert.deepEqual(frozenPublic.steerer, null);
   expectError(fixture.send("saveSeatPlanDraft", fixture.draftBody(frozen, {
     seats: [],
     change_kind: "EDIT"
