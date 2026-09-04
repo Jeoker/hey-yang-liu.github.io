@@ -1,6 +1,6 @@
 # Apps Script 后端
 
-当前代码覆盖 P0／P1 核心、P2 报名与维护、P2.1 等待体验优化及 P3 排座与最终更正。P3 已部署到 Apps Script Version 10，线上 health 为服务 `0.6.0-p3`、契约 `2026-09-02.p2.1`；真实 Google API 写入验收及安全清理通过，Pages 双端浏览器验收尚未完成，状态见[当前进度](../CURRENT-STATUS.md)。P1 剩余工作与 P4 归档及历史范围见[Epic 总览](../epics/README.md)。
+当前代码覆盖 P0／P1 核心、P2 报名与维护、P2.1 等待体验优化及 P3 排座与最终更正。P3 已部署到 Apps Script Version 11，线上 health 为服务 `0.6.1-p3`、契约 `2026-09-02.p2.1`；真实 Google API、Pages 核心浏览器流程及本轮安全清理／退出通过，[GitHub Pages run 33837698705](https://github.com/jeoker/hey-yang-liu.github.io/actions/runs/33837698705) 成功。其他验证限制见[当前进度](../CURRENT-STATUS.md)。P1 剩余工作与 P4 归档及历史范围见[Epic 总览](../epics/README.md)。
 
 ## 代码与数据
 
@@ -26,6 +26,8 @@
 
 报名与排座沿用同一 `Settings` 报名版本、服务器入队顺序和 `SystemRequests` 恢复协议。取消、换侧和自动递补在一次持锁事务中同步报名、草稿及必要的系统正式 revision；未发布草稿不会混入公开版本。提交顺序和恢复约束见[后端规格](../google-sheets-backend-spec.md#会话与写入一致性)。
 
+正式座位角色使用固定的公开与管理投影入口。公开 `practice` 只返回 Coach／Steerer 的显示姓名；经 Coach session 保护的 seating workspace 才附带角色 `member_id`，供“从正式版重置草稿”恢复内部选择。普通 revision 与冻结快照遵守同一隔离规则。
+
 ## 第一次测试部署
 
 1. 使用队伍长期控制的 Google 账号创建独立 Apps Script 测试项目。可以预先创建测试 Spreadsheet，也可以让初始化函数自动建立默认名为 `Dragon Boat Training - P0 Test System` 的私有文件。
@@ -50,9 +52,9 @@
 
 ## 验证边界
 
-根目录 `npm test` 当前为 115／115，覆盖 P0／P1 基线、P2 业务边界、未知结果重试、写后故障恢复、持锁 `flush` 顺序、请求内缓存隔离，以及 P3 草稿隔离、角色互斥、手动与系统 revision、报名联动、版本冲突、最终更正和精确冻结边界。周生成的计划恢复已有专项回归，其他 P1 写入路径不能据此视为已通过全部中断测试。
+根目录 `npm test` 当前为 117／117，覆盖 P0／P1 基线、P2 业务边界、未知结果重试、写后故障恢复、持锁 `flush` 顺序、请求内缓存隔离，以及 P3 草稿隔离、角色互斥、手动与系统 revision、报名联动、版本冲突、最终更正、精确冻结边界、自动保存后的动态控件解锁和公开／管理角色投影隔离。周生成的计划恢复已有专项回归，其他 P1 写入路径不能据此视为已通过全部中断测试。
 
-当前部署版本、测试数量、真实 Google／Pages 验收证据与接续位置统一记录在[当前进度](../CURRENT-STATUS.md)，不以本地测试或部署成功代替验收。
+当前部署为 Apps Script Version 11／服务 `0.6.1-p3`，Pages run 33837698705 成功。部署版本、测试数量、真实 Google／Pages 验收证据与接续位置统一记录在[当前进度](../CURRENT-STATUS.md)，不以本地测试或部署成功代替验收。本轮 Pages 测试状态已经通过归属受控的严格脚本清理，退出码为 0、最终 `ok=true`；公开与管理双端读回及脚本／页面退出均已确认。
 
 [live-p2-acceptance.mjs](../tests/live-p2-acceptance.mjs) 是显式手动集成脚本，不随 `npm test` 执行。设置运行时环境变量 `DBT_API_URL` 后，从仓库根目录运行 `node dragon-boat-training/tests/live-p2-acceptance.mjs --write-test-data`；仅在隔离测试赛季、约定的虚构队员及初始空报名场次通过检查后写入。清理只取消本次运行创建、且 `queue_at` 与 `queue_sequence` 仍匹配的报名；不清空其他报名、不删除成员或审计，归属变化时停止并人工核对。脚本、文档及测试结果不得包含真实私有文件 ID 或凭据。
 

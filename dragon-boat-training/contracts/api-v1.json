@@ -18,8 +18,8 @@
     "seating": {
       "since_service_version": "0.6.0-p3",
       "compatibility": "Additive fields and POST actions; contract version remains compatible while the older Pages client ignores seat_plan.",
-      "public_projection": "Every practice read may include seat_plan. It contains only the latest published or frozen revision, never the Coach draft.",
-      "management_projection": "Seating workspaces contain the private draft, latest public revision, full-season member choices, pending confirmed members, server mode and edit boundary.",
+      "public_projection": "Every practice read may include seat_plan. It contains only the latest published or frozen revision, never the Coach draft. Coach and Steerer expose display names but not member IDs.",
+      "management_projection": "Protected seating workspaces contain the private draft, latest published revision, full-season member choices, pending confirmed members, server mode and edit boundary. Published Coach and Steerer roles also include member_id so reset can restore internal selections; frozen snapshots use the same public/management separation.",
       "versions": "seat_plan_version protects the Coach draft; published_revision protects the public pointer. Signup mutations can advance both in the same recoverable journal plan.",
       "correction_window": "At end_at, signup changes stop and FINAL_CORRECTION begins. Direct seat changes remain available strictly before archive_due_at=end_at+24 hours; the exact boundary is frozen even if a background trigger is late."
     }
