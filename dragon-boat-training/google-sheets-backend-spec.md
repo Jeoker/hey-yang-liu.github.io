@@ -8,9 +8,9 @@ GitHub Pages 通过单一数据模块访问 Apps Script Web App 的 `doGet`／`d
 
 | 文件 | Tab 与职责 |
 |---|---|
-| 长期系统管理 Spreadsheet | `Seasons`：赛季与绑定；`SystemSettings`：默认赛季、配置版本、已连接文件目录；`Coaches`、`CoachSessions`：统一凭据与会话；`SystemRequests`：系统级写入去重与恢复；`SystemAuditLog`：系统事件；`PublicHistoryIndex`：历史发布目录 |
+| 长期系统管理 Spreadsheet | `Seasons`：赛季与绑定；`SystemSettings`：默认赛季、配置版本、已连接文件目录；`AnnualArchiveFiles`：年度归档文件映射；`Coaches`、`CoachSessions`：统一凭据与会话；`SystemRequests`：系统级写入去重与恢复；`SystemAuditLog`：系统事件；`PublicHistoryIndex`：历史发布目录 |
 | 每季独立运营 Spreadsheet | Form 原始响应 Tab；`Members`：队员；`ScheduleTemplates`、`TrainingWeeks`：默认模板与周排期；`Practices`：训练；`SignupsCurrent`：报名；`SeatPlanCurrent`、`SeatPlanState`：排座草稿及状态；`SeatPlanRevisions`：不可变正式版本；`PracticeFinalSnapshots`：到期冻结快照；`AuditLog`：赛季事件；`Settings`：本季配置；`ImportState`：同步进度；`Health`：运行状态 |
-| 年度归档 Spreadsheet | 每次完成训练一个 Tab，保存完整私有快照；取消训练的归档形式见 D3，年度文件的创建方式见 D4 |
+| 年度归档 Spreadsheet | 由后端按训练所在日历年自动创建并复用，每次未取消且完成的训练一个 Tab，保存完整私有快照；取消训练不建立 Tab |
 
 系统状态表与原始响应应保护，日常业务通过接口修改；Code 登记、重置、停用和 Google Form 配置由管理人员人工维护。系统管理表 ID 保存在服务端配置，所有文件保持私有。已连接文件目录仅提供候选项，不开放全 Drive 浏览或任意单元格写入。
 
@@ -22,7 +22,8 @@ GitHub Pages 通过单一数据模块访问 Apps Script Web App 的 `doGet`／`d
 
 | 表 | 主要字段与约束 |
 |---|---|
-| `Seasons` | `season_id`、`name`、`start_date`、`end_date`、`timezone`、派生 `season_ends_at`、`status`；`form_id`、`form_url`、`runtime_spreadsheet_id`、`response_sheet_id`、`field_mapping`、`schema_fingerprint`；`archive_spreadsheet_id`；`binding_version`、`season_version`、`roster_version`；初始化进度、触发器 ID、同步时间、`activated_at`、`completed_at`、`archived_at`、整季归档及历史发布进度 |
+| `Seasons` | `season_id`、`name`、`start_date`、`end_date`、`timezone`、派生 `season_ends_at`、`status`；`form_id`、`form_url`、`runtime_spreadsheet_id`、`response_sheet_id`、`field_mapping`、`schema_fingerprint`；`binding_version`、`season_version`、`roster_version`；初始化进度、触发器 ID、同步时间、`activated_at`、`completed_at`、`archived_at`、整季归档及历史发布进度 |
+| `AnnualArchiveFiles` | `archive_year` 唯一、`spreadsheet_id`、创建状态、创建请求编号、创建及校验时间；年份按训练日期在赛季时区中的日历年确定，文件由部署账号自动创建并保持私有 |
 | `SystemSettings` | `default_season_id` 为空或指向已就绪且未到结束边界的开放赛季；系统配置版本用于默认值等并发修改 |
 | `Coaches` | `coach_id`、显示姓名、随机 Code 的服务端校验摘要、`credential_version`、启停状态；不设角色等级列 |
 | `CoachSessions` | 会话校验摘要、`coach_id`、签发时凭据版本、签发及到期时间、撤销状态 |
@@ -50,7 +51,7 @@ GitHub Pages 通过单一数据模块访问 Apps Script Web App 的 `doGet`／`d
 
 `display_name` 优先取人工覆盖值；同步只更新允许的源字段，不覆盖人工资料、资格或偏好。成员停用前检查项目规则列出的未完成关联。公共名单仅投影有效成员 ID 和显示姓名，私人字段留在响应表或受保护区域。
 
-周排期公开、训练日程、报名可用性、排座发布和归档进度分别表达，不合并为单个互斥状态。日程由起止时间及取消信息判断；报名可用性由赛季、该场次已完成日程发布且在周公开集合内、开放时间、服务器时间和截止规则计算，不能仅凭周已开放就放行新增草稿。`schedule_published_at` 记录日程公开，排座草稿使用 `seat_plan_version`、正式排座使用 `published_revision`，两种发布互不代替。单次训练按 `archive_due_at = end_at + 24 小时` 进入归档任务。
+周排期公开、训练日程、报名可用性、排座发布和归档进度分别表达，不合并为单个互斥状态。日程由起止时间及取消信息判断；报名可用性由赛季、该场次已完成日程发布且在周公开集合内、开放时间、服务器时间和截止规则计算，不能仅凭周已开放就放行新增草稿。`schedule_published_at` 记录日程公开，排座草稿使用 `seat_plan_version`、正式排座使用 `published_revision`，两种发布互不代替。未取消训练按 `archive_due_at = end_at + 24 小时` 进入归档任务；取消训练永不进入训练归档或公开历史投影。
 
 当前未结束训练按成员 ID 解析最新姓名；发布事件保留当时姓名。训练结束后按最终更正流程维护正式版本，在 `archive_due_at` 冻结最后正式版本及姓名快照；旧 revision 与冻结快照不被后续改名覆盖。
 
@@ -78,7 +79,7 @@ GitHub Pages 通过单一数据模块访问 Apps Script Web App 的 `doGet`／`d
 | 绑定检查 | `listConnectedSheets`、`validateSeasonBinding` | 候选文件或新链接的权限、对应关系、字段检查与导入预览 |
 | 赛季维护 | `createSeason`、`updateSeasonDraft`、`initializeSeason`、`updateSeasonSchedule`、`setDefaultSeason`、`retrySeasonArchive` | 连接就绪自动激活、维护有效季日期和默认入口、重试自动归档；不要求手动开放或手动结束赛季 |
 | 周排期维护 | `updateScheduleTemplates`、`updateTrainingWeek`、`confirmTrainingWeek`、`publishTrainingWeek` | 维护模板、当周草稿和开放时间；首次整周发布核对管理确认及到点条件，确认时已到点可随即发布，否则定时执行 |
-| 训练维护 | `createPractice`、`updatePractice`、`cancelPractice` | 增补或修改日程、移除单次安排；已公开训练保留取消记录，返回影响预览与最新数据 |
+| 训练维护 | `createPractice`、`updatePractice`、`cancelPractice` | 增补或修改日程、移除单次安排；取消只在运营数据中保留标记和审计，立即从普通公开投影移除且不进入归档，返回影响预览与最新数据 |
 | 增补发布 | `publishAdditionalPractice` | 在已开放周由管理人员确认并立即发布指定新增场次；仅追加该场次，不重发整周或公开其他草稿 |
 | 管理报名 | `signupByCoach`、`updateSignupByCoach`、`cancelSignupByCoach` | 训练结束前可用同一管理会话代报名、代改或取消，不受普通报名截止限制；结束后不再修改报名或触发递补 |
 | 队员维护 | `updateMember`、`restoreMemberName`、`setMemberStatus` | 按稳定 ID 修改资料并返回新版本 |
@@ -139,7 +140,7 @@ P1 排期管理使用 `P1M:` 请求范围及 `P1_MANAGEMENT` 确定计划。默�
 
 `setDefaultSeason` 同时核对目标 `season_version` 和首页指针的 `settings_version`，只允许有效季，不迁移名单或旧链接。赛季到期由请求入口或后台扫描记录完成事件，只清除仍指向本季的默认值；没有新默认季时首页显示最近完成季的只读结果。整季归档仍由 P4 负责。
 
-`previewPracticeChange` 返回修改前后安排、确认及候补人数、报名版本和绑定输入的 `preview_token`；`updatePractice`／`cancelPractice` 保存时重新核对赛季、周、训练及报名状态。改期保留原训练编号、原周发布批次、报名队列和排座；实际日期可以跨日历周，但不借此创建新的发布或报名。新增加场初次建立在所选周内。私有场次移除保留不可重新生成的取消标记；已公开训练取消保留公开取消状态与报名、座位历史，不触发递补。
+`previewPracticeChange` 返回修改前后安排、确认及候补人数、报名版本和绑定输入的 `preview_token`；`updatePractice`／`cancelPractice` 保存时重新核对赛季、周、训练及报名状态。改期保留原训练编号、原周发布批次、报名队列和排座；实际日期可以跨日历周，但不借此创建新的发布或报名。新增加场初次建立在所选周内。私有和已公开场次取消后均保留不可重新生成的内部取消标记及审计，关闭其写入并从普通公开投影移除；不生成训练冻结快照、归档 Tab 或荣誉墙条目，也不触发递补。
 
 修改尚未开放周的场次（包括增补和移除）推进 `week_version` 并撤回原预约确认。确认整周也推进版本；预约采用赛季时区的本地日期和时间，服务端检查夏令时歧义。触发器晚到可发布已确认批次，但不能延后训练原有报名截止。管理写入可附带最新 `current_view`；不可变操作结果不作为重试时的最新状态，投影失败仍返回已成功提交，页面只重读。
 
@@ -207,16 +208,16 @@ P1 排期管理使用 `P1M:` 请求范围及 `P1_MANAGEMENT` 确定计划。默�
 
 归档任务遍历所有赛季，不仅扫描默认赛季：
 
-1. 找到已到 `archive_due_at`、满足最终快照规则且尚未归档的训练，按 `(season_id, practice_id)` 检查已有任务与目标 Tab。
-2. 批量保存日程、状态、Coach／Steerer、最终正式 revision 与发布时间、真实船位、姓名快照、最终报名明细及相关事件。
+1. 找到未取消、已到 `archive_due_at`、满足最终快照规则且尚未归档的训练，按 `(season_id, practice_id)` 检查已有任务与目标 Tab；取消训练直接跳过且不阻塞赛季归档。
+2. 按训练日期在赛季时区中的年份读取 `AnnualArchiveFiles`；没有有效映射时，由部署账号自动创建私有年度 Spreadsheet，并在同一套确定计划、锁和检查点协议下记录及校验映射，随后批量保存日程、状态、Coach／Steerer、最终正式 revision 与发布时间、真实船位、姓名快照、最终报名明细及相关事件。
 3. 校验内容后记录 `completed_snapshot_id`、`archived_at` 和归档完成事件。Tab 已创建但状态未提交时恢复已有归档，不重复创建。
-4. 到 `season_ends_at` 自动记录赛季完成事件并进入 `COMPLETED`；只清除仍指向本季的默认值，不影响新季。待已发布训练、单次归档及必要恢复任务就绪后，生成并校验整季私有快照，再进入 `ARCHIVED`。未发布草稿纳入私有档案，不作为未完成训练阻塞归档，且不得再次开放。
+4. 到 `season_ends_at` 自动记录赛季完成事件并进入 `COMPLETED`；只清除仍指向本季的默认值，不影响新季。待所有未取消的已发布训练、单次归档及必要恢复任务就绪后，生成并校验整季私有快照，再进入 `ARCHIVED`。未发布草稿纳入私有档案，不作为未完成训练阻塞归档，且不得再次开放；取消训练只留在原运营表的最小标记及审计中，不复制进年度训练归档或公开历史。
 
-整季快照包含截止范围内的原始响应、名单、周模板与计划、报名、排座、关联配置和本季日志，以及各训练更正窗口内的正式修订。使用固定快照标识和分步检查点，保留源文件；迟到回答不能改变档案。私有归档失败维持 `COMPLETED` 并重试；公开目录发布另行恢复，不重新开放赛季。
+整季快照包含截止范围内的原始入队响应、名单、周模板，以及未取消训练的计划、报名、排座、关联配置、事件和更正窗口内的正式修订；不复制取消训练的日程、报名、排座或取消事件。使用固定快照标识和分步检查点，保留源运营文件；迟到回答不能改变档案。私有归档失败维持 `COMPLETED` 并重试；公开目录发布另行恢复，不重新开放赛季。
 
-Tab 可命名为 `2026-Q3 2026-08-22 1000 p_ab12`，身份仍以完整赛季和训练 ID 为准。年度归档目标初始化按 D4 确定；取消训练是否建立简化 Tab 按 D3 确定。
+Tab 可命名为 `2026-Q3 2026-08-22 1000 p_ab12`，身份仍以完整赛季和训练 ID 为准。年度文件可命名为 `Dragon Boat Training Archive 2026`；名称只供人识别，读取必须使用 `AnnualArchiveFiles` 中已校验的文件 ID。创建结果未知时重放原创建请求并恢复映射，不能按名称另建文件。取消训练不创建任何归档 Tab。
 
-赛季已归档且私有快照校验完成后，才向 `PublicHistoryIndex` 发布白名单快照。只取最终正式版本，不以草稿填补；公开字段及无发布、取消时的行为见项目说明。目录按赛季和训练 ID 去重，内部定位不发给浏览器。发布失败保留任务重试，不影响原归档和新季。
+赛季已归档且私有快照校验完成后，才向 `PublicHistoryIndex` 发布白名单快照。只取未取消训练的最终正式版本，不以草稿填补；没有正式版本时按项目说明显示未发布，取消训练不写入目录。目录按赛季和训练 ID 去重，内部定位不发给浏览器。发布失败保留任务重试，不影响原归档和新季。
 
 历史接口不依赖当前 `Members` 或默认赛季，使用独立缓存和版本；发布更正说明时更新公开版本，原快照不改写。归档数据不再参与实时容量与名单计算。
 
@@ -239,10 +240,10 @@ Tab 可命名为 `2026-Q3 2026-08-22 1000 p_ab12`，身份仍以完整赛季和�
 | 资料与日程 | 改名后重同步、停用关联检查、改期保留数据、关闭及重开报名确认、夏令时、多管理人员版本冲突 |
 | 报名与排座 | 无设备凭证修改、管理人员代取消、重报重新排队、Left／Ambient 及 Right／Ambient 按时间竞争、跳过无法补位者、取消后公开删名补位、无候补留空、草稿隔离、角色互斥 |
 | 修改偏好 | 换侧有位直接确认、满员转候补、原侧自动递补、换回已满原侧不挤掉递补者；保留原时间与同时间顺序、候补之间按原时间排序、候补改偏好、Ambient 转换、相同偏好不释放名额；已发布旧船位同步清理、新排位待教练安排、并发与重试不超额或重复递补 |
-| 故障恢复 | 重复请求、同编号不同参数、日志完成而当前表未完成、归档 Tab 已建而状态未写；恢复后才确认成功 |
+| 故障恢复 | 重复请求、同编号不同参数、日志完成而当前表未完成、年度文件或归档 Tab 已建而状态未写；恢复后才确认成功，并发首次归档不产生多个有效年度文件 |
 | 名单缓存 | 多浏览器共用、缓存第九分钟被读取、提前失效、并发重建、提前清理、合法空名单与源读取失败 |
 | 实时正确性 | 名单仍有效但训练满员或已截止、旧名单提交停用成员、改期后刷新；不受十分钟缓存影响 |
-| 历史与隐私 | 24 小时内更正并发布、不改报名或触发递补、到期拒绝修改、未发布草稿不归为正式结果、任务延迟不延长窗口、季完成不缩短窗口、旧姓名与私有边界保留 |
+| 历史与隐私 | 24 小时内更正并发布、不改报名或触发递补、到期拒绝修改、未发布草稿不归为正式结果、取消训练无归档 Tab 或公开入口、任务延迟不延长窗口、季完成不缩短窗口、旧姓名与私有边界保留 |
 
 ## 官方参考
 
