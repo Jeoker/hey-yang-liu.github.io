@@ -55,7 +55,9 @@
 
 根目录 `npm test` 覆盖 P0／P1 基线、P2 业务边界、未知结果重试、写后故障恢复、持锁 `flush` 顺序、请求内缓存隔离，以及 P3 草稿隔离、角色互斥、手动与系统 revision、报名联动、版本冲突、最终更正、精确冻结边界、自动保存后的动态控件解锁和公开／管理角色投影隔离。周生成的计划恢复已有专项回归，其他 P1 写入路径不能据此视为已通过全部中断测试。
 
-最新真实 Google／Pages 验收和测试数据收尾记录见[当前进度](../CURRENT-STATUS.md)及[P3 验收报告](../tests/P3-ACCEPTANCE.md)。继续写入前必须重新核对当前服务器状态，不把历史清理记录当作持续不变的状态。
+最新真实 Google／Pages 验收和测试数据收尾记录见[当前进度](../CURRENT-STATUS.md)、[P1 管理补齐验收](../tests/P1-MANAGEMENT-ACCEPTANCE.md)及[P3 验收报告](../tests/P3-ACCEPTANCE.md)。继续写入前必须重新核对当前服务器状态，不把历史清理记录当作持续不变的状态。
+
+[live-p1-management-acceptance.mjs](../tests/live-p1-management-acceptance.mjs) 是显式手动运行的 P1 真实脚本，只识别独立的 `P1 Management Acceptance 2026` 两名虚构成员。运行要求进程环境中的 `DBT_API_URL`、`DBT_COACH_CODE` 和 `--write-test-data`；默认模式拒绝复用已有的 9 月 21 日批次，不能清空记录以强行重跑。`--verify-retained-history` 只补验该批次保留的取消历史、改期后的截止及原请求重放。临时切换默认值后按归属和版本检查恢复，只取消自己创建的场次，保留报名、座位版本和审计。首次测试中的断言修正及实际通过范围见验收报告；不要把退出前的通过计数当作整轮成功。
 
 [live-p2-acceptance.mjs](../tests/live-p2-acceptance.mjs) 是显式手动集成脚本，不随 `npm test` 执行。设置运行时环境变量 `DBT_API_URL` 后，从仓库根目录运行 `node dragon-boat-training/tests/live-p2-acceptance.mjs --write-test-data`；仅在隔离测试赛季、约定的虚构队员及初始空报名场次通过检查后写入。清理只取消本次运行创建、且 `queue_at` 与 `queue_sequence` 仍匹配的报名；不清空其他报名、不删除成员或审计，归属变化时停止并人工核对。脚本、文档及测试结果不得包含真实私有文件 ID 或凭据。
 
