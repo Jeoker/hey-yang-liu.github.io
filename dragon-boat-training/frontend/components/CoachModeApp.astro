@@ -1984,9 +1984,13 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
         pendingLogin = { codeDigest, requestId: createRequestId() };
       }
       const response = await client.post("coachLogin", { coach_code: coachCode }, { requestId: pendingLogin.requestId });
-      pendingLogin = null;
+      if (typeof response.data?.session_token !== "string" || !response.data.session_token
+        || !Number.isFinite(Date.parse(response.data?.session?.expires_at))) {
+        throw new DragonBoatApiError("INVALID_RESPONSE", "登录响应不完整，暂时无法确认结果。", { retryable: true });
+      }
       sessionToken = response.data.session_token;
       saveCoachSession(sessionToken, response.data.session);
+      pendingLogin = null;
       if (loginPanel) loginPanel.hidden = true;
       if (workspace) workspace.hidden = false;
       setStatus(loginStatus, "");

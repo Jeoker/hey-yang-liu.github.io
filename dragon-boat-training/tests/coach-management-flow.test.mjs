@@ -118,7 +118,10 @@ function makeHarness({ mutate, readWorkspace, login, bootstrap, seating = false 
       }
       if (action === "getSeatingWorkspace") return envelope(state.seatingWorkspace());
       if (action === "coachLogin") {
-        if (login) await login(state, payload, options);
+        if (login) {
+          const response = await login(state, payload, options);
+          if (response) return response;
+        }
         return envelope({ session_token: "session_new", session: { expires_at: "2099-12-31T00:00:00Z" } });
       }
       if (action === "coachLogout") return envelope({});
@@ -275,6 +278,23 @@ test("a changed Code or a definitive rejection starts a new login request", asyn
   }
   const logins = h.state.calls.filter(call => call.action === "coachLogin");
   assert.equal(new Set(logins.map(call => call.options.requestId)).size, 3);
+  assert.equal(h.state.savedSession, "session_new");
+});
+
+test("an incomplete successful login envelope stays unknown and reuses its original request", async () => {
+  let attempts = 0;
+  const h = makeHarness({ login: () => ++attempts === 1 ? { data: { status: "available" } } : undefined });
+  await ready(h);
+  await h.element("logout-button").emit("click");
+  h.element("coach-code").value = "test_code";
+  await h.element("login-form").emit("submit");
+  assert.equal(h.state.savedSession, null);
+  assert.equal(h.element("workspace").hidden, true);
+  assert.match(h.element("login-status").textContent, /登录响应不完整.*原请求/);
+  h.element("coach-code").value = "test_code";
+  await h.element("login-form").emit("submit");
+  const logins = h.state.calls.filter(call => call.action === "coachLogin");
+  assert.equal(logins[0].options.requestId, logins[1].options.requestId);
   assert.equal(h.state.savedSession, "session_new");
 });
 
