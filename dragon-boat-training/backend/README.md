@@ -11,6 +11,7 @@
 - `src/SeasonStore.gs`：赛季与每季 Spreadsheet 的受控记录访问、版本检查及旧赛季 P3 Tab 的按需建立。
 - `src/SeasonActions.gs`：建季、绑定检查、初始化、成员导入和 Form 提交同步。
 - `src/ScheduleActions.gs`：默认模板、周草稿、整周发布、预约发布、加场分层发布及到期冻结扫描。
+- `src/ScheduleManagement.gs`：赛季日期与默认值、单场变更预览、排期确定计划、恢复与精确赛季完成；既有预约触发器继续使用，不重复安装。
 - `src/PublicActions.gs`：公开赛季、已发布训练、管理详情和十分钟名单投影。
 - `src/SignupActions.gs`：报名、候补、训练详情，以及报名变化与草稿／正式系统 revision 的同次可恢复写入。
 - `src/MemberActions.gs`：受保护名册、资料修正、默认偏好、启停、角色和船位关联检查，以及完成赛季最终更正所需读取。

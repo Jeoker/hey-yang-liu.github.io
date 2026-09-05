@@ -13,7 +13,7 @@ const source = await fs.readFile(new URL("../frontend/components/CoachModeApp.as
 const script = source.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;$/gm, "");
 const compiled = ts.transpileModule(script, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 
-function makeHarness({ mutate, readWorkspace, login, bootstrap, seating = false } = {}) {
+function makeHarness({ mutate, readWorkspace, readManagement, login, bootstrap, seating = false, weekStatus = "OPENED" } = {}) {
   const elements = new Map();
   const timers = new Map();
   let timerCounter = 0;
@@ -107,7 +107,10 @@ function makeHarness({ mutate, readWorkspace, login, bootstrap, seating = false 
         if (bootstrap) await bootstrap(state);
         return envelope({ panels: [], coach: { display_name: "Test Coach" }, session: { expires_at: "2099-12-31T00:00:00Z" }, default_season_id: season.season_id, seasons: [season] });
       }
-      if (action === "getSeasonManagement") return envelope({ season, is_default: true, members: state.members, templates: [], weeks: [{ week: { week_id: "week_test", status: "OPENED", week_start_date: "2099-09-07", week_version: 1 }, practices: [practice] }] });
+      if (action === "getSeasonManagement") {
+        if (readManagement) await readManagement(state);
+        return envelope({ season, is_default: true, settings_version: 4, members: state.members, templates: [], weeks: [{ week: { week_id: "week_test", status: weekStatus, week_start_date: "2099-09-07", week_version: 1 }, practices: [practice] }] });
+      }
       if (action === "listSeasonMembers") return envelope({ season_id: season.season_id, roster_version: season.roster_version, members: state.members });
       if (action === "getMemberWorkspace") {
         if (readWorkspace) await readWorkspace(state);
@@ -650,4 +653,140 @@ test("seat editor CSS keeps touch targets and a single-column mobile workflow", 
   assert.match(css, /@media \(pointer:\s*coarse\)[\s\S]*min-height:\s*3rem/);
   assert.match(css, /@media \(max-width:\s*42rem\)[\s\S]*grid-template-columns:\s*1fr/);
   assert.match(css, /touch-action:\s*manipulation/);
+});
+
+function descendant(element, text) {
+  if (element.textContent === text) return element;
+  for (const child of element.children) { const found = descendant(child, text); if (found) return found; }
+}
+async function readySchedule(h) {
+  await settled(() => h.element("season-picker").value === "season_test");
+  await h.element("open-season").emit("click");
+  const edit = descendant(h.element("admin-week-list"), "修改或取消这次训练");
+  assert.ok(edit); edit.emit("click");
+}
+function previewEnvelope(state, payload, envelope) {
+  return envelope({ before: { ...state.practice, signup_cutoff_at: "2099-09-09T20:00:00Z" },
+    after: { ...state.practice, location: payload.location, signup_cutoff_at: "2099-09-09T20:00:00Z" },
+    confirmed_count: 1, waitlisted_count: 2, week_version: 1, practice_version: 1,
+    signup_version: 3, preview_token: "reviewed_payload" });
+}
+test("P1 schedule preview is invalidated by edits and a late preview cannot restore it", async () => {
+  let release;
+  const h = makeHarness({ mutate: async (state, action, payload, _options, envelope) => {
+    assert.equal(action, "previewPracticeChange");
+    await new Promise(resolve => { release = resolve; });
+    return previewEnvelope(state, payload, envelope);
+  } });
+  await readySchedule(h);
+  h.element("practice-edit-form").emit("submit");
+  await settled(() => release);
+  h.element("practice-edit-form").elements.namedItem("location").value = "Later input";
+  h.element("practice-edit-form").emit("input");
+  release();
+  await new Promise(resolve => setImmediate(resolve));
+  h.element("practice-change-confirm").checked = true;
+  h.element("practice-change-confirm").emit("change");
+  assert.equal(h.element("practice-change-save").disabled, true);
+  assert.match(h.element("practice-change-status").textContent, /重新预览/);
+});
+
+test("P1 uncertain schedule change retries the original preview and payload without another write intent", async () => {
+  let attempts = 0;
+  const h = makeHarness({ mutate: async (state, action, payload, _options, envelope) => {
+    if (action === "previewPracticeChange") return previewEnvelope(state, payload, envelope);
+    assert.equal(action, "updatePractice");
+    if (++attempts === 1) throw new DragonBoatApiError("REQUEST_TIMEOUT", "timeout", { retryable: true });
+    state.practice.location = payload.location;
+    return envelope({ week: { week_id: "week_test", week_start_date: "2099-09-07", status: "OPENED", week_version: 2 }, practices: [state.practice] });
+  } });
+  await readySchedule(h);
+  h.element("practice-edit-form").elements.namedItem("location").value = "Original edit";
+  h.element("practice-edit-form").emit("submit");
+  await settled(() => h.element("practice-change-status").textContent.includes("候补 2 人"));
+  h.element("practice-change-confirm").checked = true; h.element("practice-change-confirm").emit("change");
+  await h.element("practice-change-save").emit("click");
+  h.element("practice-edit-form").elements.namedItem("location").value = "Unsent edit";
+  const reads = h.state.calls.filter(c => c.action === "getSeasonManagement").length;
+  await h.element("management-retry").emit("click");
+  const writes = h.state.calls.filter(c => c.action === "updatePractice");
+  assert.equal(writes.length, 2);
+  assert.deepEqual(writes[1], writes[0]);
+  assert.equal(h.state.practice.location, "Original edit");
+  assert.equal(h.state.calls.filter(c => c.action === "getSeasonManagement").length, reads);
+  assert.equal(h.element("practice-edit-block").hidden, true);
+});
+
+test("P1 confirmed schedule write with failed view requires only a read and clears the old editor", async () => {
+  const h = makeHarness({ mutate: async (state, action, payload, _options, envelope) => {
+    if (action === "previewPracticeChange") return previewEnvelope(state, payload, envelope);
+    return envelope({ view_status: "reload_required" });
+  } });
+  await readySchedule(h);
+  h.element("practice-edit-form").emit("submit");
+  await settled(() => h.element("practice-change-status").textContent.includes("候补 2 人"));
+  h.element("practice-change-confirm").checked = true; h.element("practice-change-confirm").emit("change");
+  await h.element("practice-change-save").emit("click");
+  assert.match(h.element("management-status").textContent, /保存已成功/);
+  assert.equal(h.element("practice-edit-block").hidden, true);
+  assert.equal(h.element("management-retry").hidden, true);
+  await h.element("open-season").emit("click");
+  assert.equal(h.state.calls.filter(c => c.action === "updatePractice").length, 1);
+});
+
+test("P1 logout invalidates a pending preview and clears private schedule input", async () => {
+  let release;
+  const h = makeHarness({ mutate: async (state, _action, payload, _options, envelope) => {
+    await new Promise(resolve => { release = resolve; }); return previewEnvelope(state, payload, envelope);
+  } });
+  await readySchedule(h);
+  h.element("practice-edit-form").emit("submit");
+  await settled(() => release);
+  await h.element("logout-button").emit("click"); release();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element("practice-edit-block").hidden, true);
+  assert.equal(h.element("practice-change-status").textContent, "");
+  assert.equal(h.element("practice-edit-form").elements.namedItem("location").value, "");
+});
+
+test("P1 schedule session expiry preserves its original write for explicit retry after login", async () => {
+  let attempts = 0;
+  const h = makeHarness({ mutate: async (state, action, payload, _options, envelope) => {
+    if (action === "previewPracticeChange") return previewEnvelope(state, payload, envelope);
+    if (++attempts === 1) throw new DragonBoatApiError("SESSION_EXPIRED", "expired");
+    return envelope({ week: { week_id: "week_test", week_start_date: "2099-09-07", status: "OPENED", week_version: 2 }, practices: [state.practice] });
+  } });
+  await readySchedule(h);
+  h.element("practice-edit-form").emit("submit");
+  await settled(() => h.element("practice-change-status").textContent.includes("候补 2 人"));
+  h.element("practice-change-confirm").checked = true;
+  await h.element("practice-change-save").emit("click");
+  h.element("coach-code").value = "code-for-test";
+  await h.element("login-form").emit("submit");
+  await h.element("management-retry").emit("click");
+  const writes = h.state.calls.filter(c => c.action === "updatePractice");
+  assert.equal(writes.length, 2);
+  assert.equal(writes[1].options.requestId, writes[0].options.requestId);
+  assert.deepEqual({ ...writes[1].payload, session_token: "" }, { ...writes[0].payload, session_token: "" });
+  assert.equal(writes[1].payload.session_token, "session_new");
+});
+
+test("P1 opening form sends the selected date in the season timezone without browser conversion", async () => {
+  const h = makeHarness({ weekStatus: "DRAFT", mutate: async (state, action, _payload, _options, envelope) => {
+    assert.equal(action, "confirmTrainingWeek");
+    return envelope({ week: { week_id: "week_test", week_start_date: "2099-09-07", status: "SCHEDULED", week_version: 2,
+      scheduled_open_at: "2099-09-08T13:00:00Z" }, practices: [state.practice] });
+  } });
+  await readySchedule(h);
+  const heading = h.element("admin-week-list").children[0].children[0];
+  const form = heading.children.find(child => child.tagName === "form");
+  assert.ok(form);
+  form.children[0].children[0].value = "2099-09-08";
+  form.children[1].children[0].value = "09:00";
+  form.emit("submit");
+  await settled(() => h.state.calls.some(call => call.action === "confirmTrainingWeek"));
+  const call = h.state.calls.find(call => call.action === "confirmTrainingWeek");
+  assert.equal(call.payload.open_date, "2099-09-08");
+  assert.equal(call.payload.open_time, "09:00");
+  assert.equal(call.payload.open_at, undefined);
 });

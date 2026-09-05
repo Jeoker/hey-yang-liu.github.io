@@ -55,7 +55,7 @@ function handleDragonBoatRequest_(method, event) {
       case "coachLogout":
         return dragonBoatSuccess_(coachLogout_(request), requestId);
       case "coachBootstrap":
-        return dragonBoatSuccess_(coachBootstrap_(request), requestId);
+        return dragonBoatSuccess_(withDragonBoatScriptLock_(function () { return coachBootstrap_(request); }), requestId);
       case "coachConnectivityWrite":
         return dragonBoatSuccess_(coachConnectivityWrite_(request), requestId);
       case "getSeasonManagement":
@@ -68,18 +68,24 @@ function handleDragonBoatRequest_(method, event) {
         return dragonBoatSuccess_(initializeSeason_(request), requestId);
       case "retrySeasonSync":
         return dragonBoatSuccess_(retrySeasonSync_(request), requestId);
+      case "previewPracticeChange":
+        return dragonBoatSuccess_(previewPracticeChange_(request), requestId);
+      case "setDefaultSeason":
+      case "updateSeasonSchedule":
+      case "updatePractice":
+      case "cancelPractice":
       case "updateScheduleTemplates":
-        return dragonBoatSuccess_(updateScheduleTemplates_(request), requestId);
+        return dragonBoatSuccess_(manageSchedule_(request), requestId);
       case "updateTrainingWeek":
         return dragonBoatSuccess_(updateTrainingWeek_(request), requestId);
       case "confirmTrainingWeek":
-        return dragonBoatSuccess_(confirmTrainingWeek_(request), requestId);
+        return dragonBoatSuccess_(manageSchedule_(request), requestId);
       case "publishTrainingWeek":
-        return dragonBoatSuccess_(publishTrainingWeek_(request), requestId);
+        return dragonBoatSuccess_(manageSchedule_(request), requestId);
       case "createPractice":
-        return dragonBoatSuccess_(createPractice_(request), requestId);
+        return dragonBoatSuccess_(manageSchedule_(request), requestId);
       case "publishAdditionalPractice":
-        return dragonBoatSuccess_(publishAdditionalPractice_(request), requestId);
+        return dragonBoatSuccess_(manageSchedule_(request), requestId);
       default:
         throw dragonBoatRequestError_(
           "UNSUPPORTED_ACTION",

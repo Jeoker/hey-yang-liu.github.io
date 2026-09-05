@@ -2,6 +2,11 @@ function publicBootstrap_(request) {
   var seasonId = typeof request.season_id === "string" ? request.season_id.trim() : "";
   if (!seasonId) seasonId = getOpenDefaultSeasonId_();
   if (!seasonId) {
+    var completed = getSheetRecords_("Seasons").filter(function (row) { return seasonEffectiveStatus_(row) === "COMPLETED"; })
+      .sort(function (a, b) { return String(b.season_ends_at).localeCompare(String(a.season_ends_at)); });
+    if (completed.length) seasonId = String(completed[0].season_id);
+  }
+  if (!seasonId) {
     return { state: "NO_ACTIVE_SEASON", season: null, weeks: [] };
   }
   var season = requireSeason_(seasonId);
@@ -51,6 +56,7 @@ function publicBootstrap_(request) {
   return {
     state: effectiveStatus === "OPEN" ? (upcomingCount ? "ACTIVE" : "REST") : effectiveStatus,
     season: seasonPublicProjection_(season),
+    default_season_id: getOpenDefaultSeasonId_(),
     weeks: weeks
   };
 }
@@ -142,6 +148,8 @@ function getSeasonManagement_(request) {
   return {
     season: seasonManagementProjection_(season),
     is_default: getDefaultSeasonId_() === String(season.season_id),
+    settings_version: defaultSeasonSetting_().settings_version,
+    generated_at: new Date().toISOString(),
     templates: templates,
     weeks: weeks,
     members: members

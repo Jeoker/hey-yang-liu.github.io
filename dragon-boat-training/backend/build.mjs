@@ -11,6 +11,7 @@ const sourceOrder = [
   "SeasonStore.gs",
   "SeasonActions.gs",
   "ScheduleActions.gs",
+  "ScheduleManagement.gs",
   "SeatingActions.gs",
   "SignupActions.gs",
   "MemberActions.gs",

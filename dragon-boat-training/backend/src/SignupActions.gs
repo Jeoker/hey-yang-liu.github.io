@@ -8,10 +8,11 @@ function recoverP2Requests_() {
   getSheetRecords_("SystemRequests").filter(function (record) {
     var actor = String(record.actor_id);
     return String(record.status) === "STARTED" &&
-      (actor.indexOf("P2:") === 0 || actor.indexOf("P3:") === 0 || actor.indexOf("P3_FREEZE:") === 0);
+      (actor.indexOf("P2:") === 0 || actor.indexOf("P3:") === 0 || actor.indexOf("P3_FREEZE:") === 0 || actor.indexOf("P1M:") === 0);
   }).forEach(function (record) {
     var saved = readSystemRequestResult_(record);
-    if (saved.kind === "P2") applyP2Request_(record);
+    if (saved.kind === "P1_MANAGEMENT") applyScheduleRequest_(record);
+    else if (saved.kind === "P2") applyP2Request_(record);
     else if (saved.kind === "P3") applyP3Request_(record);
     else throw dragonBoatRequestError_("RECOVERY_REQUIRED", "A pending business change needs recovery.", true);
   });
@@ -188,6 +189,7 @@ function publicPractice_(request) {
       season_id: String(season.season_id), generated_at: new Date().toISOString(), practice: practiceProjection_(practice),
       signup_version: state.version, roster_version: Number(season.roster_version),
       binding_version: Number(season.binding_version),
+      season_status: seasonEffectiveStatus_(season), default_season_id: getOpenDefaultSeasonId_(),
       signup_open: !signupClosedReason_(season, practice, false),
       management_signup_open: !signupClosedReason_(season, practice, true),
       closed_reason: signupClosedReason_(season, practice, false),

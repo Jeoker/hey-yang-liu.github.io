@@ -151,6 +151,7 @@ function withDragonBoatScriptLock_(callback) {
     dragonBoatStoreHandles_ = {};
     dragonBoatRecordCache_ = {};
     recoverP2Requests_();
+    if (getScriptProperties_().getProperty(DRAGON_BOAT_PROPERTY_KEYS_.SYSTEM_SPREADSHEET_ID) && getSystemSpreadsheet_().getSheetByName("Seasons")) completeDueSeasons_();
     return callback();
   } finally {
     try {

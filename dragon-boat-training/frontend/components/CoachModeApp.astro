@@ -104,6 +104,13 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
             <button type="button" class="dragon-boat-secondary-button" data-sync-button hidden>重新检查名单</button>
           </div>
           <p data-season-sync></p>
+          <form class="dragon-boat-form-grid" data-season-schedule-form>
+            <label>调整开始日期<input name="start_date" type="date" required /></label>
+            <label>调整最后有效日<input name="end_date" type="date" required /></label>
+            <p class="dragon-boat-field-wide">按本季时区计算；不更换名单或表单。已公开历史及有效训练必须仍在日期范围内。</p>
+            <button type="submit" class="dragon-boat-secondary-button">保存赛季日期</button>
+          </form>
+          <button type="button" class="dragon-boat-secondary-button" data-set-default-season>设为首页默认赛季</button>
         </section>
 
         <section class="dragon-boat-management-block" data-binding-block hidden>
@@ -142,7 +149,8 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
           <div data-admin-week-list></div>
 
           <div class="dragon-boat-divider"></div>
-          <h3>为已开放周增加单次训练</h3>
+          <h3>为所选周增加单次训练</h3>
+          <p>未开放周的加场随整周确认；已开放周的加场须单独发布。</p>
           <form class="dragon-boat-form-grid" data-additional-form>
             <label>所属周<select name="week_id" required data-additional-week></select></label>
             <label>训练日期<input name="practice_date" type="date" required /></label>
@@ -153,6 +161,23 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
             <label class="dragon-boat-field-wide">地图链接（可选）<input name="map_url" type="url" /></label>
             <button type="submit" class="dragon-boat-secondary-button">保存为私有加场草稿</button>
           </form>
+          <section class="dragon-boat-management-block" data-practice-edit-block hidden>
+            <h3 data-practice-edit-title>修改训练安排</h3>
+            <form class="dragon-boat-form-grid" data-practice-edit-form>
+              <label>训练日期<input name="practice_date" type="date" required /></label>
+              <label>开始时间<input name="start_time" type="time" required /></label>
+              <label>结束时间<input name="end_time" type="time" required /></label>
+              <label>训练时区<input name="timezone" required /></label>
+              <label>训练地点<input name="location" required maxlength="120" /></label>
+              <label>训练完整地址<input name="address" required maxlength="240" /></label>
+              <label>训练地图链接<input name="map_url" type="url" /></label>
+              <button type="submit" class="dragon-boat-secondary-button">预览修改影响</button>
+            </form>
+            <button type="button" class="dragon-boat-secondary-button" data-practice-cancel-preview>预览取消或移除</button>
+            <p class="dragon-boat-form-status" data-practice-change-status aria-live="polite"></p>
+            <label><input type="checkbox" data-practice-change-confirm />我已核对前后安排、报名截止及取消影响；不会自动通知队员。</label>
+            <button type="button" class="dragon-boat-primary-button" data-practice-change-save disabled>确认上述变更</button>
+          </section>
         </section>
       </section>
 
@@ -322,6 +347,15 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const seasonTitle = q<HTMLElement>("[data-season-title]");
   const seasonMeta = q<HTMLElement>("[data-season-meta]");
   const seasonSync = q<HTMLElement>("[data-season-sync]");
+  const seasonScheduleForm = q<HTMLFormElement>("[data-season-schedule-form]");
+  const setDefaultSeason = q<HTMLButtonElement>("[data-set-default-season]");
+  const practiceEditBlock = q<HTMLElement>("[data-practice-edit-block]");
+  const practiceEditTitle = q<HTMLElement>("[data-practice-edit-title]");
+  const practiceEditForm = q<HTMLFormElement>("[data-practice-edit-form]");
+  const practiceCancelPreview = q<HTMLButtonElement>("[data-practice-cancel-preview]");
+  const practiceChangeStatus = q<HTMLElement>("[data-practice-change-status]");
+  const practiceChangeConfirm = q<HTMLInputElement>("[data-practice-change-confirm]");
+  const practiceChangeSave = q<HTMLButtonElement>("[data-practice-change-save]");
   const syncButton = q<HTMLButtonElement>("[data-sync-button]");
   const bindingBlock = q<HTMLElement>("[data-binding-block]");
   const bindingForm = q<HTMLFormElement>("[data-binding-form]");
@@ -397,12 +431,16 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const client = apiUrl ? new DragonBoatApiClient({ baseUrl: apiUrl, timeoutMs: 30000 }) : null;
   const pendingRequests = new Map<string, { action: string; payload: Record<string, unknown>; requestId: string }>();
   let managementWriting = false;
+  let managementAfterLogin: Array<[string, { action: string; payload: Record<string, unknown>; requestId: string }]> = [];
   let sessionToken = "";
   // Keep only an in-memory fingerprint and request ID for an uncertain login.
   // The user re-enters the Code; neither the Code nor its digest is persisted.
   let pendingLogin: { codeDigest: string; requestId: string } | null = null;
   let loginInProgress = false;
   let currentSeasonData: any = null;
+  let editingSchedule: any = null;
+  let schedulePreview: any = null;
+  let schedulePreviewSequence = 0;
   let bindingValidated = false;
   let seasonReadVersion = 0;
   let p2ReadVersion = 0;
@@ -460,13 +498,22 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       BINDING_SCHEMA_CHANGED: "响应表的列结构已经改变，请检查后再同步。",
       BINDING_LOCKED: "赛季已经激活，不能替换它的表单绑定。",
       WEEK_START_NOT_MONDAY: "请选择一个周一作为本周起点。",
+      WEEK_EMPTY: "请先添加至少一场有效训练，再确认整周。",
+      OPEN_TIME_TOO_LATE: "开放时间必须早于本周第一场训练开始；请移除已开始的草稿或调整预约时间。",
+      PRACTICE_OUTSIDE_WEEK: "训练日期须位于所选周内；跨周请在目标周另建训练。",
+      PRACTICE_OUTSIDE_SEASON: "训练的开始和结束时间都必须在赛季日期范围内。",
+      PRACTICE_ALREADY_STARTED: "已经开始的训练不能常规改期或取消；请选择未来时间。",
+      SEASON_SCHEDULE_CONFLICT: "已有有效训练或已公开历史超出新日期范围，请先核对冲突场次。",
+      PREVIEW_STALE: "安排或报名已发生变化，请重新预览影响并确认。",
+      INVALID_LOCAL_TIME: "该时区在这个日期不存在所选时间，请检查夏令时切换。",
+      AMBIGUOUS_LOCAL_TIME: "所选时间位于夏令时重复时段，请选择一个没有歧义的时间。",
       SCHEDULE_TEMPLATES_REQUIRED: "请先保存至少一条默认训练模板。",
       MEMBER_HAS_ACTIVE_LINKS: "这位队员仍关联未结束训练。请先处理下方列出的报名、座位或带队角色，再停用。",
       MEMBER_INACTIVE: "这位队员已停用，不能为其新增或修改报名。请先核对队员状态。",
       MEMBER_NOT_FOUND: "本季找不到这位队员，请刷新名册。",
       SIGNUP_EXISTS: "这位队员已经报名。已更新清单，请使用修改偏好或取消入口。",
       SIGNUP_NOT_ACTIVE: "这条报名已不存在或已取消，请核对刷新后的清单。",
-      PRACTICE_ENDED: "训练已经结束，报名记录只读；最终座位更正在后续排座阶段处理。",
+      PRACTICE_ENDED: "训练已经结束，报名记录只读；结束后 24 小时内可在排座区更正最终座位。",
       PRACTICE_CANCELLED: "训练已取消，不能再修改报名。",
       SIGNUP_CLOSED: "这次训练当前不接受报名修改，请核对服务器状态。",
       ROLE_CONFLICT: "这位队员已担任本次训练的 Coach 或 Steerer，不能同时占用划桨名额。",
@@ -487,10 +534,13 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   }
 
   function showLogin(message = "", state = "error", preserveDraft = false) {
+    closeScheduleEditor();
+    seasonScheduleForm?.reset();
     sessionToken = "";
     seasonReadVersion += 1;
     currentSeasonData = null;
     pendingRequests.clear();
+    if (!preserveDraft) managementAfterLogin = [];
     clearP2View();
     if (!preserveDraft) draftAfterLogin = null;
     if (loginPanel) loginPanel.hidden = false;
@@ -515,6 +565,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   function protectedError(error: unknown) {
     if (error instanceof DragonBoatApiError && error.code === "STALE_SESSION_RESPONSE") return true;
     if (isCoachSessionError(error)) {
+      managementAfterLogin = [...pendingRequests.entries()].map(([key, request]) => [key, structuredClone(request)]);
       const draft = captureP2Draft();
       draftAfterLogin = draft ? { ...draft, pending: p2Pending } : null;
       clearCoachSession();
@@ -542,7 +593,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       pendingRequests.delete(key);
       return response;
     } catch (error) {
-      if (error instanceof DragonBoatApiError && !error.retryable && !["INVALID_RESPONSE", "CONTRACT_MISMATCH"].includes(error.code)) pendingRequests.delete(key);
+      if (error instanceof DragonBoatApiError && !error.retryable && !isCoachSessionError(error) && !["INVALID_RESPONSE", "CONTRACT_MISMATCH"].includes(error.code)) pendingRequests.delete(key);
       throw error;
     } finally {
       managementWriting = false;
@@ -609,6 +660,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   }
 
   function clearSeasonView() {
+    closeScheduleEditor();
     currentSeasonData = null;
     if (seasonDetail) seasonDetail.hidden = true;
     if (bindingBlock) bindingBlock.hidden = true;
@@ -642,7 +694,16 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     if (seasonMeta) seasonMeta.textContent = `${season.start_date} 至 ${season.end_date} · ${season.timezone} · version ${season.season_version}`;
     if (seasonSync) seasonSync.textContent = season.status === "OPEN"
       ? `${currentSeasonData.members.length} 名队员 · 名单版本 ${season.roster_version} · 最近同步 ${season.last_sync_at ? new Date(season.last_sync_at).toLocaleString() : "尚无"}`
-      : "连接完成后会自动激活赛季并导入已有回答。";
+      : season.status === "DRAFT" ? "连接完成后会自动激活赛季并导入已有回答。"
+        : "赛季已结束，名单和排期只读。既有训练的 24 小时最终排座更正窗口仍按各场结束时间计算；整季归档将在 P4 接入。";
+    if (seasonScheduleForm) {
+      seasonScheduleForm.hidden = !["DRAFT", "OPEN"].includes(season.status);
+      for (const name of ["start_date", "end_date"]) {
+        const input = seasonScheduleForm.elements.namedItem(name) as HTMLInputElement;
+        if (input) input.value = season[name];
+      }
+    }
+    if (setDefaultSeason) setDefaultSeason.hidden = season.status !== "OPEN" || currentSeasonData.is_default;
     if (syncButton) syncButton.hidden = season.status !== "OPEN";
     if (bindingBlock) bindingBlock.hidden = season.status !== "DRAFT";
     if (activeSeasonBlock) activeSeasonBlock.hidden = season.status !== "OPEN";
@@ -1646,11 +1707,166 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     }
   }
 
+  function scheduleTime(value: string, timezone: string) {
+    return new Intl.DateTimeFormat("zh-CN", { timeZone: timezone, dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+  }
+
+  function scheduleInputTime(value: string, timezone: string) {
+    const parts: Record<string, string> = {};
+    new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(value)).forEach((part) => { parts[part.type] = part.value; });
+    return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+  }
+
+  function invalidateSchedulePreview() {
+    schedulePreviewSequence++;
+    schedulePreview = null;
+    if (practiceChangeConfirm) practiceChangeConfirm.checked = false;
+    if (practiceChangeSave) practiceChangeSave.disabled = true;
+  }
+
+  function closeScheduleEditor() {
+    invalidateSchedulePreview();
+    editingSchedule = null;
+    if (practiceEditBlock) practiceEditBlock.hidden = true;
+    practiceEditForm?.reset();
+    setStatus(practiceChangeStatus, "");
+  }
+
+  function openScheduleEditor(week: any, practice: any) {
+    if (!practiceEditForm || !currentSeasonData) return;
+    closeScheduleEditor();
+    editingSchedule = { season_id: currentSeasonData.season.season_id, week, practice };
+    const start = scheduleInputTime(practice.start_at, practice.timezone);
+    const end = scheduleInputTime(practice.end_at, practice.timezone);
+    const values = { ...practice, practice_date: start.date, start_time: start.time, end_time: end.time };
+    for (const name of ["practice_date", "start_time", "end_time", "timezone", "location", "address", "map_url"]) {
+      const input = practiceEditForm.elements.namedItem(name) as HTMLInputElement;
+      if (input) input.value = values[name] || "";
+    }
+    if (practiceEditTitle) practiceEditTitle.textContent = `修改安排 · ${scheduleTime(practice.start_at, practice.timezone)} · ${practice.location}`;
+    if (practiceEditBlock) practiceEditBlock.hidden = false;
+  }
+
+  function scheduleWriteGuard() {
+    if (p2Busy || p2Pending || seatDirty || seatSaving || seatPublishing || seatOutcomeUnknown || seatServerConflict) {
+      throw new DragonBoatApiError("RELATED_EDIT_PENDING", "请先完成或确认队员与排座区的当前操作，再修改排期。");
+    }
+  }
+
+  function applyScheduleResult(data: any, seasonId: string) {
+    if (!currentSeasonData || currentSeasonData.season.season_id !== seasonId || seasonPicker?.value !== seasonId) return false;
+    if (data.view_status === "reload_required") {
+      closeScheduleEditor();
+      clearP2View();
+      currentSeasonData = null;
+      if (activeSeasonBlock) activeSeasonBlock.hidden = true;
+      if (seasonDetail) seasonDetail.hidden = true;
+      setStatus(managementStatus, "保存已成功，但最新状态暂时读取失败。请点击「打开赛季与排期」只重新读取，不要再次提交原操作。", "error");
+      return false;
+    }
+    data = data.current_view || data;
+    seasonReadVersion++;
+    if (data.season) currentSeasonData.season = data.season;
+    if (data.templates) currentSeasonData.templates = data.templates;
+    if (data.week) {
+      const index = currentSeasonData.weeks.findIndex((item: any) => item.week.week_id === data.week.week_id);
+      const updated = { week: data.week, practices: data.practices };
+      if (index >= 0) currentSeasonData.weeks[index] = updated;
+      else currentSeasonData.weeks.push(updated);
+    }
+    if (data.settings_version !== undefined) {
+      currentSeasonData.settings_version = data.settings_version;
+      currentSeasonData.is_default = data.default_season_id === seasonId;
+    }
+    if (seasonPicker) for (const option of Array.from(seasonPicker.options || [])) {
+      if (data.default_season_id !== undefined) option.textContent = (option.textContent || "").replace(" · 首页默认", "");
+      if (option.value === seasonId) option.textContent = `${currentSeasonData.season.name} · ${currentSeasonData.season.status}${currentSeasonData.is_default ? " · 首页默认" : ""}`;
+    }
+    closeScheduleEditor();
+    // Any already-open operational view must be reread after a schedule change.
+    // The guard above ensures no unsaved seating or uncertain signup is discarded.
+    clearP2View();
+    renderSeason();
+    return true;
+  }
+
+  async function submitScheduleChange(action: string, input: Record<string, any>, successMessage: string) {
+    try {
+      scheduleWriteGuard();
+      setStatus(managementStatus, "正在保存，请等待服务器确认……", "pending");
+      const response = await managedPost(action, input, `schedule:${action}:${input.season_id}`);
+      if (applyScheduleResult(response.data, input.season_id)) setStatus(managementStatus, successMessage, "ready");
+      return true;
+    } catch (error) {
+      if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
+      return false;
+    }
+  }
+
+  async function previewScheduleChange(change: "UPDATE" | "CANCEL") {
+    if (!client || !sessionToken || !editingSchedule || !practiceEditForm) return;
+    invalidateSchedulePreview();
+    const sequence = schedulePreviewSequence;
+    const token = sessionToken;
+    const input = { season_id: editingSchedule.season_id, week_id: editingSchedule.week.week_id,
+      practice_id: editingSchedule.practice.practice_id, change,
+      ...(change === "UPDATE" ? formObject(practiceEditForm) : {}) };
+    setStatus(practiceChangeStatus, "正在读取当前报名并预览影响；此操作不会写入……", "pending");
+    try {
+      const response = await client.post("previewPracticeChange", { ...input, session_token: token });
+      if (token !== sessionToken || sequence !== schedulePreviewSequence || editingSchedule?.practice.practice_id !== input.practice_id) return;
+      const data = response.data;
+      schedulePreview = { input, data };
+      const describe = (practice: any) => `${scheduleTime(practice.start_at, practice.timezone)} 至 ${scheduleTime(practice.end_at, practice.timezone)}（${practice.timezone}），${practice.location}，${practice.address}，地图：${practice.map_url || "无"}`;
+      const effect = change === "CANCEL" ? (data.before.schedule_published_at
+        ? "取消后停止所有报名和排座操作，公开页面保留取消标记；报名与座位历史保留，不递补。"
+        : "移除此私有场次，不向队员公开，重新生成本周也不会恢复它。")
+        : `改为：${describe(data.after)}。报名截止：${scheduleTime(data.before.signup_cutoff_at, data.before.timezone)} → ${scheduleTime(data.after.signup_cutoff_at, data.after.timezone)}；截止重算可能提前关闭或重新开放报名。保留原报名、排队顺序和座位。`;
+      setStatus(practiceChangeStatus, `当前：${describe(data.before)}。确认 ${data.confirmed_count} 人、候补 ${data.waitlisted_count} 人。${effect}${data.invalidates_week_confirmation ? " 本周预约将撤回，须重新确认开放。" : ""}`, "ready");
+    } catch (error) {
+      if (token !== sessionToken || sequence !== schedulePreviewSequence) return;
+      if (!protectedError(error)) setStatus(practiceChangeStatus, messageForError(error), "error");
+    }
+  }
+
+  practiceEditForm?.addEventListener("input", () => { invalidateSchedulePreview(); setStatus(practiceChangeStatus, "内容已改变，请重新预览。"); });
+  practiceEditForm?.addEventListener("submit", (event) => { event.preventDefault(); previewScheduleChange("UPDATE"); });
+  practiceCancelPreview?.addEventListener("click", () => previewScheduleChange("CANCEL"));
+  practiceChangeConfirm?.addEventListener("change", () => {
+    if (practiceChangeSave) practiceChangeSave.disabled = !schedulePreview || !practiceChangeConfirm.checked;
+  });
+  practiceChangeSave?.addEventListener("click", async () => {
+    if (!schedulePreview || !practiceChangeConfirm?.checked) return;
+    const { input, data } = schedulePreview;
+    if (practiceChangeSave) practiceChangeSave.disabled = true;
+    await submitScheduleChange(input.change === "CANCEL" ? "cancelPractice" : "updatePractice", {
+      ...input, week_version: data.week_version, practice_version: data.practice_version,
+      signup_version: data.signup_version, preview_token: data.preview_token
+    }, input.change === "CANCEL" ? "训练已取消或移除，历史和其他场次保持不变。" : "训练安排已保存，报名和座位保持不变。队员下次刷新时可看到新安排。");
+    invalidateSchedulePreview();
+  });
+  seasonScheduleForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!currentSeasonData) return;
+    const season = currentSeasonData.season;
+    const values = formObject(seasonScheduleForm);
+    if (!window.confirm(`把赛季日期从 ${season.start_date} 至 ${season.end_date} 改为 ${values.start_date} 至 ${values.end_date}（${season.timezone}）？训练、名单和表单绑定不变。`)) return;
+    await submitScheduleChange("updateSeasonSchedule", { season_id: season.season_id, season_version: season.season_version, ...values }, "赛季日期已更新。");
+  });
+  setDefaultSeason?.addEventListener("click", async () => {
+    if (!currentSeasonData) return;
+    const season = currentSeasonData.season;
+    if (!window.confirm(`把「${season.name}」设为首页默认赛季？其他赛季的独立链接和名单保持不变。`)) return;
+    await submitScheduleChange("setDefaultSeason", { season_id: season.season_id, season_version: season.season_version,
+      settings_version: currentSeasonData.settings_version }, "首页默认赛季已切换；其他赛季数据没有迁移。");
+  });
+
   function renderAdminWeeks(weeks: any[]) {
     if (!adminWeekList || !additionalWeek) return;
     adminWeekList.replaceChildren();
     additionalWeek.replaceChildren();
-    const openedWeeks = weeks.filter((item) => item.week.status === "OPENED");
+    const availableWeeks = weeks.filter((item) => ["DRAFT", "SCHEDULED", "OPENED"].includes(item.week.status));
     if (!weeks.length) {
       const empty = document.createElement("p");
       empty.className = "dragon-boat-empty-state";
@@ -1665,21 +1881,46 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       const title = document.createElement("h4");
       title.textContent = `${item.week.week_start_date} · ${item.week.status} · v${item.week.week_version}`;
       heading.append(title);
-      if (item.week.status === "DRAFT") {
+      if (["DRAFT", "SCHEDULED"].includes(item.week.status)) {
         const publish = document.createElement("button");
         publish.type = "button";
         publish.className = "dragon-boat-primary-button";
         publish.textContent = "确认并立即开放整周";
         publish.addEventListener("click", () => confirmWeek(item.week));
         heading.append(publish);
+        const form = document.createElement("form");
+        form.className = "dragon-boat-inline-form";
+        const dateLabel = document.createElement("label");
+        dateLabel.textContent = `预约开放日期（${currentSeasonData.season.timezone}）`;
+        const date = document.createElement("input"); date.type = "date"; date.required = true;
+        dateLabel.append(date);
+        const timeLabel = document.createElement("label"); timeLabel.textContent = "预约开放时间";
+        const time = document.createElement("input"); time.type = "time"; time.required = true;
+        timeLabel.append(time);
+        const scheduled = document.createElement("button"); scheduled.type = "submit";
+        scheduled.className = "dragon-boat-secondary-button"; scheduled.textContent = "确认并预约开放整周";
+        form.append(dateLabel, timeLabel, scheduled);
+        form.addEventListener("submit", (event) => { event.preventDefault(); confirmWeek(item.week, { open_date: date.value, open_time: time.value }); });
+        heading.append(form);
+        if (item.week.scheduled_open_at) {
+          const summary = document.createElement("p");
+          summary.textContent = `已确认，预约 ${scheduleTime(item.week.scheduled_open_at, currentSeasonData.season.timezone)} 开放；再编辑后须重新确认。`;
+          heading.append(summary);
+        }
       }
       const practices = document.createElement("ul");
       item.practices.forEach((practice: any) => {
         const line = document.createElement("li");
         const text = document.createElement("span");
-        text.textContent = `${new Date(practice.start_at).toLocaleString()} · ${practice.location} · ${practice.schedule_published_at ? "已公开" : "私有草稿"}`;
+        text.textContent = `${scheduleTime(practice.start_at, practice.timezone)} 至 ${scheduleTime(practice.end_at, practice.timezone)} · ${practice.location} · ${practice.cancelled ? (practice.schedule_published_at ? "已取消（保留历史）" : "已移除（不公开）") : practice.schedule_published_at ? "已公开" : "私有草稿"}`;
         line.append(text);
-        if (item.week.status === "OPENED" && !practice.schedule_published_at) {
+        if (!practice.cancelled && Date.parse(practice.start_at) > Date.now()) {
+          const edit = document.createElement("button"); edit.type = "button";
+          edit.className = "dragon-boat-text-button"; edit.textContent = "修改或取消这次训练";
+          edit.addEventListener("click", () => openScheduleEditor(item.week, practice));
+          line.append(edit);
+        }
+        if (item.week.status === "OPENED" && !practice.schedule_published_at && !practice.cancelled) {
           const publish = document.createElement("button");
           publish.type = "button";
           publish.className = "dragon-boat-text-button";
@@ -1692,52 +1933,35 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       card.append(heading, practices);
       adminWeekList.append(card);
     });
-    openedWeeks.forEach((item) => {
+    availableWeeks.forEach((item) => {
       const option = document.createElement("option");
       option.value = item.week.week_id;
-      option.textContent = item.week.week_start_date;
+      option.textContent = `${item.week.week_start_date} · ${item.week.status}`;
       option.dataset.weekVersion = String(item.week.week_version);
       additionalWeek.append(option);
     });
     if (additionalForm) {
       additionalForm.querySelectorAll("input, select, button").forEach((control: any) => {
-        control.disabled = !openedWeeks.length;
+        control.disabled = !availableWeeks.length;
       });
     }
   }
 
-  async function confirmWeek(week: any) {
+  async function confirmWeek(week: any, opening: Record<string, string> = {}) {
     if (!currentSeasonData) return;
-    setStatus(managementStatus, "正在确认并开放整周……", "pending");
-    try {
-      await managedPost("confirmTrainingWeek", {
+    await submitScheduleChange("confirmTrainingWeek", {
         season_id: currentSeasonData.season.season_id,
         week_id: week.week_id,
-        week_version: week.week_version
-      }, `confirm:${week.week_id}:${week.week_version}`);
-      await loadSeason(currentSeasonData.season.season_id);
-      setStatus(managementStatus, "整周训练已经正式开放。", "ready");
-    } catch (error) {
-      if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
-    }
+        week_version: week.week_version, ...opening
+      }, opening.open_date ? "整周已确认预约，届时自动开放；再编辑需要重新确认。" : "整周训练已经正式开放。");
   }
 
   async function publishAdditional(week: any, practice: any) {
     if (!currentSeasonData) return;
-    setStatus(managementStatus, "正在单独发布加场……", "pending");
-    try {
-      await managedPost("publishAdditionalPractice", {
-        season_id: currentSeasonData.season.season_id,
-        week_id: week.week_id,
-        practice_id: practice.practice_id,
-        week_version: week.week_version,
-        practice_version: practice.practice_version
-      }, `publish-additional:${practice.practice_id}:${practice.practice_version}`);
-      await loadSeason(currentSeasonData.season.season_id);
-      setStatus(managementStatus, "这次加场已经单独发布，其他草稿没有公开。", "ready");
-    } catch (error) {
-      if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
-    }
+    await submitScheduleChange("publishAdditionalPractice", {
+      season_id: currentSeasonData.season.season_id, week_id: week.week_id,
+      practice_id: practice.practice_id, week_version: week.week_version, practice_version: practice.practice_version
+    }, "这次加场已单独发布，其他草稿没有公开。");
   }
 
   memberSearch?.addEventListener("input", () => {
@@ -1990,12 +2214,17 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       }
       sessionToken = response.data.session_token;
       saveCoachSession(sessionToken, response.data.session);
+      const pendingSeasonId = String(managementAfterLogin[0]?.[1].payload.season_id || "");
+      managementAfterLogin.forEach(([key, request]) => pendingRequests.set(key, request));
+      managementAfterLogin = [];
+      renderManagementRetry();
       pendingLogin = null;
       if (loginPanel) loginPanel.hidden = true;
       if (workspace) workspace.hidden = false;
       setStatus(loginStatus, "");
       try {
-        await refreshBootstrap();
+        await refreshBootstrap(pendingSeasonId);
+        if (pendingRequests.size) setStatus(managementStatus, "登录已恢复。请点击「按原内容重试上次操作」确认之前的提交，原内容与编号保持不变。", "pending");
       } catch (error) {
         if (!protectedError(error)) setStatus(managementStatus,
           `登录已成功，但赛季入口读取失败。请点击「刷新」，无需重新登录。${messageForError(error)}`, "error");
@@ -2042,6 +2271,11 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
         if (createSeasonDetails) createSeasonDetails.open = false;
       }
       if (request.action === "createPractice") additionalForm?.reset();
+      const scheduleAction = ["updateSeasonSchedule", "setDefaultSeason", "updatePractice", "cancelPractice", "confirmTrainingWeek", "publishAdditionalPractice", "createPractice"].includes(request.action);
+      if (scheduleAction) {
+        if (applyScheduleResult(response.data, String(request.payload.season_id || ""))) setStatus(managementStatus, "原操作已确认成功，请核对结果。", "ready");
+        return;
+      }
       await refreshBootstrap(response.data.season?.season_id || String(request.payload.season_id || ""));
       setStatus(managementStatus, "原操作已由服务器确认成功，已重新读取赛季。请核对结果后再进行新的修改。", "ready");
     } catch (error) {
@@ -2172,20 +2406,11 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     const option = additionalWeek.selectedOptions[0];
     if (!option) return;
     const season = currentSeasonData.season;
-    setStatus(managementStatus, "正在保存私有加场草稿……", "pending");
-    try {
-      await managedPost("createPractice", {
-        season_id: season.season_id,
-        week_id: option.value,
-        week_version: Number(option.dataset.weekVersion),
-        ...formObject(additionalForm)
-      }, `additional:${season.season_id}:${option.value}`);
-      additionalForm.reset();
-      await loadSeason(season.season_id);
-      setStatus(managementStatus, "加场草稿已保存，尚未公开。请在对应周中单独发布。", "ready");
-    } catch (error) {
-      if (!protectedError(error)) setStatus(managementStatus, messageForError(error), "error");
-    }
+    const saved = await submitScheduleChange("createPractice", {
+      season_id: season.season_id, week_id: option.value,
+      week_version: Number(option.dataset.weekVersion), ...formObject(additionalForm)
+    }, "加场草稿已保存，尚未公开。未开放周须重新确认整周；已开放周须单独发布加场。");
+    if (saved) additionalForm.reset();
   });
 
   writeButton?.addEventListener("click", async () => {

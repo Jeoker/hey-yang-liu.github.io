@@ -61,6 +61,9 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       <strong data-roster-count></strong>
       <span data-roster-detail></span>
     </section>
+    <p data-default-season-notice hidden>首页默认赛季已经改变。当前页面仍保留本季，姓名和报名不会迁移。
+      <a href={appPath} data-default-season-link>离开本页，查看首页默认赛季</a>
+    </p>
 
     <section class="dragon-boat-week-list" data-week-list hidden aria-labelledby="published-training-title">
       <div class="dragon-boat-section-heading">
@@ -157,6 +160,8 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const seasonRange = root?.querySelector<HTMLElement>("[data-season-range]");
   const seasonState = root?.querySelector<HTMLElement>("[data-season-state]");
   const joinLink = root?.querySelector<HTMLAnchorElement>("[data-join-link]");
+  const defaultSeasonNotice = root?.querySelector<HTMLElement>("[data-default-season-notice]");
+  const defaultSeasonLink = root?.querySelector<HTMLAnchorElement>("[data-default-season-link]");
   const rosterSummary = root?.querySelector<HTMLElement>("[data-roster-summary]");
   const rosterCount = root?.querySelector<HTMLElement>("[data-roster-count]");
   const rosterDetail = root?.querySelector<HTMLElement>("[data-roster-detail]");
@@ -279,6 +284,11 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
         const address = document.createElement("p");
         address.textContent = practice.address;
         card.append(title, state, time, location, address);
+        if (practice.schedule_changed_at) {
+          const change = document.createElement("p");
+          change.textContent = `安排已更新：${dateTime(practice.schedule_changed_at, practice.timezone)}，请核对时间和地点。`;
+          card.append(change);
+        }
         if (practice.map_url) {
           const map = document.createElement("a");
           map.href = practice.map_url;
@@ -440,7 +450,15 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       practiceData = next;
       const serverTime = Date.parse(response.meta.server_time);
       if (Number.isFinite(serverTime)) serverOffsetMs = serverTime - Date.now();
-      season = { ...season, roster_version: practiceData.roster_version, binding_version: practiceData.binding_version };
+      season = { ...season, roster_version: practiceData.roster_version, binding_version: practiceData.binding_version,
+        status: practiceData.season_status || season.status };
+      if (defaultSeasonNotice) defaultSeasonNotice.hidden = !practiceData.default_season_id || practiceData.default_season_id === seasonId;
+      if (joinLink) joinLink.hidden = season.status !== "OPEN" || !season.join_form_url;
+      if (season.status !== "OPEN") {
+        roster = null;
+        if (rosterSummary) rosterSummary.hidden = true;
+        if (seasonState) seasonState.textContent = "本赛季已经结束，报名只读；历史归档功能正在开发。";
+      }
       // Only the season member snapshot is cached; this response is always read afresh.
       if (season.status === "OPEN") {
         try { await renderRoster(client, season); }
@@ -659,6 +677,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       const serverTime = Date.parse(response.meta.server_time);
       if (Number.isFinite(serverTime)) serverOffsetMs = serverTime - Date.now();
       season = data.season;
+      if (defaultSeasonNotice) defaultSeasonNotice.hidden = !data.default_season_id || data.default_season_id === data.season?.season_id;
       showConnection("ready", "连接正常", "已读取最新公开训练计划。", `contract ${response.meta.contract_version}`);
       if (!data.season) {
         if (pageTitle) pageTitle.textContent = "目前没有开放赛季";
@@ -681,7 +700,10 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
         joinLink.hidden = !data.season.join_form_url || data.season.status !== "OPEN";
       }
       renderWeeks(data);
-      try { await renderRoster(client, data.season); }
+      try {
+        if (data.season.status === "OPEN") await renderRoster(client, data.season);
+        else { roster = null; if (rosterSummary) rosterSummary.hidden = true; }
+      }
       catch {
         if (rosterSummary) rosterSummary.hidden = false;
         if (rosterCount) rosterCount.textContent = "姓名暂时无法读取";
@@ -696,6 +718,12 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     }
   }
 
+  defaultSeasonLink?.addEventListener("click", (event) => {
+    if (writing || pendingWrite || confirmation) {
+      event.preventDefault();
+      setSignupStatus("请先确认或结束本次报名操作，再前往其他赛季。", "error");
+    }
+  });
   pageRetry?.addEventListener("click", () => {
     showConnection("pending", "正在重试", "正在重新读取训练计划……");
     loadPage();

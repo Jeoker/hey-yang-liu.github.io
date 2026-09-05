@@ -242,7 +242,7 @@ function deterministicEventId_(requestRecord, suffix) {
   return "evt_" + hmacDigest_(requestRecord.request_key + "\n" + suffix, secret).slice(0, 40);
 }
 
-function ensureSystemAuditEvent_(requestRecord, action, status, details) {
+function ensureSystemAuditEvent_(requestRecord, action, status, details, actorType) {
   var eventId = deterministicEventId_(requestRecord, action);
   var existing = findRecord_("SystemAuditLog", "event_id", eventId);
   if (existing) {
@@ -252,7 +252,7 @@ function ensureSystemAuditEvent_(requestRecord, action, status, details) {
     event_id: eventId,
     request_id: requestRecord.request_id,
     server_time: new Date().toISOString(),
-    actor_type: "COACH",
+    actor_type: actorType || "COACH",
     actor_id: requestRecord.actor_id,
     action: action,
     status: status,

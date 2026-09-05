@@ -123,6 +123,7 @@ function coachBootstrap_(request) {
     ],
     p0_connectivity_write_available: true,
     default_season_id: getDefaultSeasonId_(),
+    settings_version: defaultSeasonSetting_().settings_version,
     seasons: seasons
   };
 }
