@@ -1,7 +1,7 @@
 # Dragon Boat Training
 
 > 实现进度、部署版本、验收边界和接续位置统一见[当前进度](CURRENT-STATUS.md)。
-> 更新：2026-09-04
+> 更新：2026-09-05
 
 为龙舟队提供按赛季入队、每周排期与训练报名、候补、排座和历史荣誉墙。网站部署于 GitHub Pages，业务由 Google Apps Script 处理，数据保存在 Google Sheets。
 
