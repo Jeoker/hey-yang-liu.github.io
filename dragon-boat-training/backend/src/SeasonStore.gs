@@ -170,6 +170,20 @@ function getSeasonSheetRecords_(season, sheetName) {
   return result;
 }
 
+function getSeasonSheetRecordsBefore_(season, sheetName, beforeRow, maximumRows) {
+  var sheet = getSeasonSheet_(season, sheetName);
+  var headers = DRAGON_BOAT_RUNTIME_SHEET_HEADERS_[sheetName];
+  var upperExclusive = Math.min(Math.max(2, Number(beforeRow || sheet.getLastRow() + 1)), sheet.getLastRow() + 1);
+  var count = Math.min(Math.max(0, Number(maximumRows || 0)), Math.max(0, upperExclusive - 2));
+  if (!count) return { records: [], before_row: upperExclusive, has_more: false };
+  var startRow = upperExclusive - count;
+  var result = mapSheetRowsToRecords_(headers,
+    sheet.getRange(startRow, 1, count, headers.length).getValues(), startRow).filter(function (record) {
+      return !record.season_id || String(record.season_id) === String(season.season_id);
+    }).reverse();
+  return { records: result, before_row: startRow, has_more: startRow > 2 };
+}
+
 function seasonRecordCacheKey_(season, sheetName) {
   return "season:" + season.runtime_spreadsheet_id + ":" + season.season_id + ":" + sheetName;
 }

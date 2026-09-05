@@ -16,7 +16,7 @@
 - `src/SignupActions.gs`：报名、候补、训练详情，以及报名变化与草稿／正式系统 revision 的同次可恢复写入。
 - `src/MemberActions.gs`：受保护名册、资料修正、默认偏好、启停、角色和船位关联检查，以及完成赛季最终更正所需读取。
 - `src/SeatingActions.gs`：排座工作区、完整草稿快照、角色、手动／系统 revision、最终更正及精确冻结快照。
-- `src/ArchiveActions.gs`：到期冻结、单场及整季私有快照、年度归档文件、公开荣誉墙、更正说明、归档健康与操作记录。
+- `src/ArchiveActions.gs`：到期冻结、分批归档检查点、单场及整季私有快照、年度归档文件、公开荣誉墙索引与缓存、更正说明、归档健康及分页操作记录。
 - `src/TimeUtils.gs`：赛季时区、日历边界及本地训练时间解析。
 - `src/Setup.gs`：一次性初始化及新增／重置个人 Coach Code。
 - `src/appsscript.json`：V8 运行时配置。
@@ -24,9 +24,11 @@
 - `build.mjs`：按固定顺序生成可直接粘贴到网页编辑器的单文件构建结果；运行根目录 `npm run build:dragon-boat-backend`。
 - `../contracts/api-v1.json`：当前请求和响应契约。
 
-长期系统 Spreadsheet 包含 `Coaches`、`CoachSessions`、`SystemRequests`、`SystemAuditLog`、`Seasons`、`SystemSettings`，以及 P4 的 `AnnualArchiveFiles`、`PracticeArchives`、`SeasonArchives`、`PublicHistoryIndex`、`HistoryCorrections`。每季响应 Spreadsheet 包含名单、排期、训练及报名表，并使用 `SeatPlanCurrent` 保存当前草稿座位、`SeatPlanState` 保存角色和版本指针、`SeatPlanRevisions` 保存不可变正式版本、`PracticeFinalSnapshots` 保存到期冻结快照；既有赛季在首次使用 P3 能力时按需建立新增 Tab。Code 使用随机 salt 和服务端 secret 生成摘要；短期会话令牌带服务端签名，Sheet 只保存令牌摘要。重置 Code 会推进 `credential_version`，停用凭据或版本变化会让旧会话立即失效。
+长期系统 Spreadsheet 包含 `Coaches`、`CoachSessions`、`SystemRequests`、`SystemAuditLog`、`Seasons`、`SystemSettings`，以及归档使用的 `AnnualArchiveFiles`、`PracticeArchives`、`SeasonArchives`、`PublicHistoryIndex`、`PublicHistorySeasons`、`HistoryCorrections`。`PublicHistorySeasons` 保存每季紧凑目录、训练摘要、公开更正投影和详情行定位，日常历史读取无需扫描持续增长的训练索引；已有 P4 数据由 `setupDragonBoatP4` 幂等补建。每季响应 Spreadsheet 包含名单、排期、训练及报名表，并使用 `SeatPlanCurrent` 保存当前草稿座位、`SeatPlanState` 保存角色和版本指针、`SeatPlanRevisions` 保存不可变正式版本、`PracticeFinalSnapshots` 保存到期冻结快照；既有赛季在首次使用 P3 能力时按需建立新增 Tab。Code 使用随机 salt 和服务端 secret 生成摘要；短期会话令牌带服务端签名，Sheet 只保存令牌摘要。重置 Code 会推进 `credential_version`，停用凭据或版本变化会让旧会话立即失效。
 
-既有五分钟 `publishDueTrainingWeeks` 触发器同时扫描到期冻结和归档，不另建第二个周期任务。系统按训练年份自动创建并复用一个私有 `Dragon Boat Training Archive YYYY` Spreadsheet；取消训练不写入单场 Tab、整季快照或公开目录。整季私有快照核验后才把赛季标为 `ARCHIVED` 并发布荣誉墙。冻结后只允许通过受保护接口追加版本化更正说明，原座位快照不改写。
+既有五分钟 `publishDueTrainingWeeks` 触发器同时扫描到期冻结和归档，不另建第二个周期任务。每轮冻结与归档默认最多处理八个工作单元并分别保留游标，同时受默认 210 秒预算约束；后续触发从检查点继续。系统按训练年份自动创建并复用一个私有 `Dragon Boat Training Archive YYYY` Spreadsheet；取消训练不写入单场 Tab、整季快照或公开目录。整季私有快照核验后才把赛季标为 `ARCHIVED` 并批量写入荣誉墙投影。冻结后只允许通过受保护接口追加版本化更正说明，原座位快照不改写。
+
+公开历史目录默认每页 30 条、最多 100 条；目录缓存五分钟，单季摘要缓存十五分钟，单场详情缓存一小时。缓存缺失时读取 `PublicHistorySeasons` 或按已保存行号读取单条快照，缓存失败则直接返回权威结果。管理审计默认每页 50 条、最多 100 条，并以游标倒序读取有限范围；不再为一次页面打开全量读取整个审计表。所有这些优化只影响只读投影，报名、容量、候补、排座草稿和版本校验仍读取权威表格。
 
 报名与排座沿用同一 `Settings` 报名版本、服务器入队顺序和 `SystemRequests` 恢复协议。取消、换侧和自动递补在一次持锁事务中同步报名、草稿及必要的系统正式 revision；未发布草稿不会混入公开版本。提交顺序和恢复约束见[后端规格](../google-sheets-backend-spec.md#会话与写入一致性)。
 
@@ -42,6 +44,8 @@
    - `DRAGON_BOAT_INITIAL_COACH_NAME`
    - `DRAGON_BOAT_INITIAL_COACH_CODE`，长度 6 至 128 字符
    - 可选 `DRAGON_BOAT_SESSION_TTL_SECONDS`，允许 900 至 86400，默认 28800
+   - 可选 `DRAGON_BOAT_ARCHIVE_BATCH_LIMIT`，允许 1 至 50，默认 8
+   - 可选 `DRAGON_BOAT_ARCHIVE_TIME_BUDGET_MS`，允许 30000 至 270000，默认 210000
 3. 将 `src/` 推送到测试 Apps Script 项目，运行 `setupDragonBoatP4` 并完成 Spreadsheet、Forms 和触发器授权。该函数包含 P0／P1 初始化，幂等建立预约开放触发器和 P4 系统 Tab；临时明文初始 Code 会自动删除。已有管理员且未提供新 Code 时可以安全重跑，不会轮换凭据或重复记录凭据事件。
 4. 将 Web App 设为以部署账号执行，并允许队员无需 Google 登录访问。前端保存当前公开 `/exec` 地址作为默认值，也可以用构建变量 `PUBLIC_DRAGON_BOAT_API_URL` 覆盖。
 5. 从实际 GitHub Pages 测试入口验证健康检查、Code 登录、受保护写入、重复请求、退出和过期会话。
@@ -56,7 +60,7 @@
 
 ## 验证边界
 
-根目录 `npm test` 覆盖 P0／P1 基线、P2 业务边界、未知结果重试、写后故障恢复、持锁 `flush` 顺序、请求内缓存隔离，P3 草稿隔离、角色互斥、手动与系统 revision、报名联动、版本冲突、最终更正及精确冻结边界，以及 P4 的取消过滤、单场／整季快照、年度文件复用、公开字段隔离、更正说明和归档中断恢复。周生成的计划恢复已有专项回归，其他 P1 写入路径不能据此视为已通过全部中断测试。
+根目录 `npm test` 覆盖 P0／P1 基线、P2 业务边界、未知结果重试、写后故障恢复、持锁 `flush` 顺序、请求内缓存隔离，P3 草稿隔离、角色互斥、手动与系统 revision、报名联动、版本冲突、最终更正及精确冻结边界，P4 的取消过滤、单场／整季快照、年度文件复用、公开字段隔离、更正说明和归档中断恢复，以及 P5 的两秒合并保存、审计与历史分页、有界读取、公开缓存、紧凑索引、批量写入及分批归档续跑。周生成的计划恢复已有专项回归，其他 P1 写入路径不能据此视为已通过全部中断测试。
 
 最新真实 Google／Pages 验收和测试数据收尾记录见[当前进度](../CURRENT-STATUS.md)、[P1 管理补齐验收](../tests/P1-MANAGEMENT-ACCEPTANCE.md)及[P3 验收报告](../tests/P3-ACCEPTANCE.md)。继续写入前必须重新核对当前服务器状态，不把历史清理记录当作持续不变的状态。
 

@@ -30,7 +30,7 @@ function handleDragonBoatRequest_(method, event) {
       case "practice":
         return dragonBoatSuccess_(publicPractice_(request), requestId);
       case "historySeasons":
-        return dragonBoatSuccess_(publicHistorySeasons_(), requestId);
+        return dragonBoatSuccess_(publicHistorySeasons_(request), requestId);
       case "seasonHistory":
         return dragonBoatSuccess_(publicSeasonHistory_(request), requestId);
       case "archivedPractice":

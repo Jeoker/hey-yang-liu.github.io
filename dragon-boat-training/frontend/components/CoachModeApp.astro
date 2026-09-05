@@ -334,6 +334,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
         </div>
         <p class="dragon-boat-form-status" data-audit-status aria-live="polite"></p>
         <ol class="dragon-boat-management-list" data-audit-list></ol>
+        <button type="button" class="dragon-boat-secondary-button" data-audit-more hidden>加载更早记录</button>
       </details>
 
       <details class="dragon-boat-connectivity-panel">
@@ -473,6 +474,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const auditRefresh = q<HTMLButtonElement>("[data-audit-refresh]");
   const auditStatus = q<HTMLElement>("[data-audit-status]");
   const auditList = q<HTMLOListElement>("[data-audit-list]");
+  const auditMore = q<HTMLButtonElement>("[data-audit-more]");
   const seatUndo = q<HTMLButtonElement>("[data-seat-undo]");
   const seatReset = q<HTMLButtonElement>("[data-seat-reset]");
   const seatSave = q<HTMLButtonElement>("[data-seat-save]");
@@ -481,6 +483,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const apiUrl = root?.getAttribute("data-api-url")?.trim() || "";
   const client = apiUrl ? new DragonBoatApiClient({ baseUrl: apiUrl, timeoutMs: 30000 }) : null;
   const pendingRequests = new Map<string, { action: string; payload: Record<string, unknown>; requestId: string }>();
+  const SEAT_SAVE_DEBOUNCE_MS = 2000;
   let managementWriting = false;
   let managementAfterLogin: Array<[string, { action: string; payload: Record<string, unknown>; requestId: string }]> = [];
   let sessionToken = "";
@@ -507,6 +510,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   let practiceFresh = false;
   let archiveReadVersion = 0;
   let auditReadVersion = 0;
+  let auditCursor = "";
   let p2Busy = false;
   let p2Refreshing = false;
   let p2Pending: { kind: "member" | "signup"; action: string; payload: Record<string, any>; requestId: string; accepted?: boolean; result?: any; draft?: any } | null = null;
@@ -713,6 +717,8 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       historyCorrectionForm.hidden = true;
     }
     if (auditList) auditList.replaceChildren();
+    auditCursor = "";
+    if (auditMore) auditMore.hidden = true;
     setStatus(archiveStatus, "");
     setStatus(auditStatus, "");
   }
@@ -797,33 +803,45 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     }
   }
 
-  async function loadManagementAudit() {
+  async function loadManagementAudit(append = false) {
     const seasonId = seasonPicker?.value || "";
     if (!client || !sessionToken || !seasonId) {
       setStatus(auditStatus, "请先在上方选择赛季。", "pending");
       return;
     }
+    if (append && !auditCursor) return;
     const token = sessionToken;
     const readVersion = ++auditReadVersion;
     if (auditRefresh) auditRefresh.disabled = true;
-    setStatus(auditStatus, "正在读取最近 100 条操作记录……", "pending");
+    if (auditMore) auditMore.disabled = true;
+    setStatus(auditStatus, append ? "正在读取更早的操作记录……" : "正在读取最近 50 条操作记录……", "pending");
     try {
-      const response = await client.post("listManagementAudit", { session_token: token, season_id: seasonId, limit: 100 });
+      const response = await client.post("listManagementAudit", {
+        session_token: token, season_id: seasonId, limit: 50,
+        ...(append && auditCursor ? { cursor: auditCursor } : {})
+      });
       if (token !== sessionToken || readVersion !== auditReadVersion) return;
       if (auditList) {
-        auditList.replaceChildren(...(response.data.events || []).map((event: any) => {
+        const items = (response.data.events || []).map((event: any) => {
           const item = document.createElement("li");
+          item.dataset.eventId = event.event_id;
           const actor = event.actor_id || event.actor_type || "SYSTEM";
           item.textContent = `${new Date(event.server_time).toLocaleString()} · ${event.action} · ${event.status} · ${actor}`;
           return item;
-        }));
+        });
+        if (append) auditList.append(...items);
+        else auditList.replaceChildren(...items);
       }
-      setStatus(auditStatus, response.data.events?.length ? `已读取 ${response.data.events.length} 条操作记录。` : "本赛季暂无操作记录。", "ready");
+      auditCursor = response.data.next_cursor || "";
+      if (auditMore) auditMore.hidden = !auditCursor;
+      const visibleCount = auditList?.children.length || 0;
+      setStatus(auditStatus, visibleCount ? `已显示 ${visibleCount} 条操作记录。` : "本赛季暂无操作记录。", "ready");
     } catch (error) {
       if (token !== sessionToken || readVersion !== auditReadVersion) return;
       if (!protectedError(error)) setStatus(auditStatus, messageForError(error), "error");
     } finally {
       if (readVersion === auditReadVersion && auditRefresh) auditRefresh.disabled = false;
+      if (readVersion === auditReadVersion && auditMore) auditMore.disabled = false;
     }
   }
 
@@ -1527,7 +1545,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
 
   function scheduleSeatSave(changeKind = "EDIT") {
     if (seatSaveTimer !== undefined) window.clearTimeout(seatSaveTimer);
-    seatSaveTimer = window.setTimeout(() => { saveSeatDraft(changeKind); }, 650);
+    seatSaveTimer = window.setTimeout(() => { saveSeatDraft(changeKind); }, SEAT_SAVE_DEBOUNCE_MS);
   }
 
   function updateSeatControls() {
@@ -2468,7 +2486,8 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       if (!protectedError(error)) setStatus(archiveStatus, messageForError(error), "error");
     }
   });
-  auditRefresh?.addEventListener("click", () => loadManagementAudit());
+  auditRefresh?.addEventListener("click", () => { auditCursor = ""; loadManagementAudit(false); });
+  auditMore?.addEventListener("click", () => loadManagementAudit(true));
 
   loginForm?.addEventListener("submit", async (event) => {
     event.preventDefault();

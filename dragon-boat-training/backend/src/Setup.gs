@@ -36,6 +36,7 @@ function setupDragonBoatP4() {
   var result = setupDragonBoatP1();
   result.archive_status = withDragonBoatScriptLock_(function () {
     ensureP4SystemSheets_();
+    ensurePublicHistorySeasonIndex_();
     return "ready";
   });
   return result;

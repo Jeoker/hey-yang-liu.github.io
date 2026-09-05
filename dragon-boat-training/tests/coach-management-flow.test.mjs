@@ -16,6 +16,7 @@ const compiled = ts.transpileModule(script, { compilerOptions: { target: ts.Scri
 function makeHarness({ mutate, readWorkspace, readManagement, login, bootstrap, seating = false, weekStatus = "OPENED" } = {}) {
   const elements = new Map();
   const timers = new Map();
+  const timerDelays = new Map();
   let timerCounter = 0;
   const document = { querySelector: (selector) => elements.get(selector), createElement: (tag) => new Element(tag) };
   class Element {
@@ -139,8 +140,13 @@ function makeHarness({ mutate, readWorkspace, readManagement, login, bootstrap, 
   }
   const context = vm.createContext({ document, Date, Intl, Error, console, structuredClone, TextEncoder, crypto: webcrypto, FormData: FormDataMock,
     window: {
-      setTimeout(callback) { const id = ++timerCounter; timers.set(id, callback); return id; },
-      clearTimeout(id) { timers.delete(id); },
+      setTimeout(callback, delay = 0) {
+        const id = ++timerCounter;
+        timers.set(id, callback);
+        timerDelays.set(id, Number(delay));
+        return id;
+      },
+      clearTimeout(id) { timers.delete(id); timerDelays.delete(id); },
       confirm: () => true
     },
     DragonBoatApiClient: Client, DragonBoatApiError,
@@ -161,9 +167,11 @@ function makeHarness({ mutate, readWorkspace, readManagement, login, bootstrap, 
     async flushTimers() {
       const callbacks = [...timers.values()];
       timers.clear();
+      timerDelays.clear();
       callbacks.forEach((callback) => callback());
       await new Promise((resolve) => setImmediate(resolve));
     },
+    pendingTimerDelays: () => [...timerDelays.values()],
     mutationCalls: () => state.calls.filter((call) => /signupByCoach|SignupByCoach|Member|createSeason/.test(call.action) && !["listSeasonMembers", "getMemberWorkspace"].includes(call.action)),
     seatCalls: () => state.calls.filter((call) => ["saveSeatPlanDraft", "publishSeatPlan"].includes(call.action))
   };
@@ -498,6 +506,7 @@ test("Coach seat autosave keeps later local edits and rebases the next save", as
   } });
   await readySeating(harness);
   placeFromPool(harness, "member_alice", 1, "LEFT");
+  assert.deepEqual(harness.pendingTimerDelays(), [2000], "seat edits should coalesce for two seconds before writing");
   await harness.flushTimers();
   await settled(() => harness.seatCalls().length === 1);
 

@@ -216,6 +216,9 @@ test("P4 appends versioned public correction notes without rewriting the frozen 
   const after = ok(f.get("archivedPractice", { season_id: f.season.season_id, practice_id: practiceId }));
   assert.equal(after.history_version, before.history_version + 1);
   assert.equal(after.corrections.length, 1);
+  const seasonHistory = ok(f.get("seasonHistory", { season_id: f.season.season_id }));
+  assert.equal(seasonHistory.practices[0].history_version, after.history_version);
+  assert.equal(seasonHistory.practices[0].correction_count, 1);
   assert.equal(after.seat_plan.rows[0].left.display_name, before.seat_plan.rows[0].left.display_name);
   fails(f.send("appendHistoryCorrection", { ...input, note: "Another note" }), "VERSION_CONFLICT");
 
@@ -256,25 +259,128 @@ test("P4 recovers a failed practice archive on the next maintenance run", async 
 test("P4 resumes public history projection after a private season archive succeeds", async () => {
   const f = await fixture();
   f.setTime("2026-09-03T17:00:00.000Z");
-  const original = f.backend.context.appendSheetRecord_;
+  const original = f.backend.context.appendSheetRecords_;
   let interrupted = false;
-  f.backend.context.appendSheetRecord_ = function (sheetName, record) {
+  f.backend.context.appendSheetRecords_ = function (sheetName, records) {
     if (!interrupted && sheetName === "PublicHistoryIndex") {
       interrupted = true;
       throw new Error("history projection interruption");
     }
-    return original(sheetName, record);
+    return original(sheetName, records);
   };
   assert.throws(() => f.backend.context.runDragonBoatArchiveTasks(), /history projection interruption/);
   assert.equal(f.backend.context.requireSeason_(f.season.season_id).status, "ARCHIVED");
   assert.equal(sheetRecords(f.backend.spreadsheet, "SeasonArchives")[0].status, "PRIVATE_ARCHIVED");
   assert.equal(sheetRecords(f.backend.spreadsheet, "PublicHistoryIndex").length, 0);
 
-  f.backend.context.appendSheetRecord_ = original;
+  f.backend.context.appendSheetRecords_ = original;
   const recovered = f.backend.context.runDragonBoatArchiveTasks();
   assert.equal(recovered.practice_archived_count, 0);
   assert.equal(recovered.season_archived_count, 1);
   assert.equal(sheetRecords(f.backend.spreadsheet, "SeasonArchives")[0].status, "PUBLISHED");
   assert.equal(sheetRecords(f.backend.spreadsheet, "AnnualArchiveFiles").length, 1);
   assert.equal(sheetRecords(f.backend.spreadsheet, "PublicHistoryIndex").length, 1);
+});
+
+test("P5 archives long seasons in resumable bounded batches", async () => {
+  const f = await fixture({ templates: [1, 2, 3] });
+  f.backend.properties.setProperty("DRAGON_BOAT_ARCHIVE_BATCH_LIMIT", "1");
+  f.setTime("2026-09-03T17:00:00.000Z");
+
+  const runs = [];
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const result = f.backend.context.runDragonBoatArchiveTasks();
+    runs.push(result);
+    assert.ok(result.work_units <= 1, "one maintenance run must respect the configured work-unit limit");
+    if (!result.has_more) break;
+  }
+
+  assert.ok(runs.length > 1, "the archive should resume from a checkpoint across runs");
+  assert.equal(runs.at(-1).has_more, false);
+  assert.equal(f.backend.context.requireSeason_(f.season.season_id).status, "ARCHIVED");
+  assert.equal(sheetRecords(f.backend.spreadsheet, "PracticeArchives").length, 3);
+  assert.equal(sheetRecords(f.backend.spreadsheet, "AnnualArchiveFiles").length, 1);
+  assert.equal(sheetRecords(f.backend.spreadsheet, "SeasonArchives")[0].status, "PUBLISHED");
+  assert.equal(sheetRecords(f.backend.spreadsheet, "PublicHistoryIndex").length, 3);
+
+  const replay = f.backend.context.runDragonBoatArchiveTasks();
+  assert.equal(replay.work_units, 0);
+  assert.equal(replay.has_more, false);
+  assert.equal(sheetRecords(f.backend.spreadsheet, "PracticeArchives").length, 3);
+  assert.equal(sheetRecords(f.backend.spreadsheet, "PublicHistoryIndex").length, 3);
+});
+
+test("P5 still freezes each due practice while its season remains open", async () => {
+  const f = await fixture({ templates: [1, 2, 3] });
+  f.backend.properties.setProperty("DRAGON_BOAT_ARCHIVE_BATCH_LIMIT", "1");
+  f.setTime("2026-09-01T17:00:00.000Z");
+
+  const result = f.backend.context.runDragonBoatArchiveTasks();
+  assert.equal(result.frozen_count, 1);
+  assert.equal(result.practice_archived_count, 0);
+  assert.equal(f.backend.context.requireSeason_(f.season.season_id).status, "OPEN");
+  const snapshot = f.backend.context.getPracticeFinalSnapshot_(
+    f.backend.context.requireSeason_(f.season.season_id), f.practice(0).practice_id
+  );
+  assert.equal(snapshot.status, "UNPUBLISHED");
+  assert.equal(sheetRecords(f.backend.spreadsheet, "PracticeArchives").length, 0);
+});
+
+test("P5 paginates management audit records with bounded season-sheet reads", async () => {
+  const f = await fixture();
+  const season = f.backend.context.requireSeason_(f.season.season_id);
+  const expectedIds = new Set();
+  for (let index = 0; index < 120; index += 1) {
+    const eventId = `p5_audit_${String(index).padStart(3, "0")}`;
+    expectedIds.add(eventId);
+    f.backend.context.appendSeasonSheetRecord_(season, "AuditLog", {
+      event_id: eventId,
+      request_id: `p5_request_${String(index).padStart(3, "0")}`,
+      server_time: new Date(Date.parse("2026-08-31T13:00:00.000Z") + index * 1000).toISOString(),
+      season_id: season.season_id,
+      entity_type: "PRACTICE",
+      entity_id: `practice_${index}`,
+      actor_type: "COACH",
+      actor_id: "coach_alpha",
+      action: "P5_AUDIT_FIXTURE",
+      status: "SUCCEEDED",
+      details_json: "{}"
+    });
+  }
+
+  const auditSheet = f.binding.runtimeSpreadsheet.getSheetByName("AuditLog");
+  const originalGetRange = auditSheet.getRange.bind(auditSheet);
+  const dataReadSizes = [];
+  auditSheet.getRange = function (row, column, rowCount, columnCount) {
+    if (row > 1) dataReadSizes.push(rowCount);
+    return originalGetRange(row, column, rowCount, columnCount);
+  };
+
+  const seen = new Set();
+  let cursor = "";
+  let finished = false;
+  for (let pageNumber = 0; pageNumber < 12; pageNumber += 1) {
+    const page = ok(f.send("listManagementAudit", {
+      season_id: season.season_id,
+      limit: 25,
+      ...(cursor ? { cursor } : {})
+    }));
+    page.events.forEach((event) => {
+      if (expectedIds.has(event.event_id)) {
+        assert.equal(seen.has(event.event_id), false, `duplicate audit event ${event.event_id}`);
+        seen.add(event.event_id);
+      }
+    });
+    cursor = page.next_cursor;
+    if (!cursor) {
+      finished = true;
+      break;
+    }
+  }
+
+  assert.equal(finished, true, "audit pagination should reach the end");
+  assert.equal(seen.size, expectedIds.size);
+  assert.ok(dataReadSizes.length > 1);
+  assert.ok(dataReadSizes.every((size) => size <= 26),
+    `season audit reads must stay within limit + 1 rows, saw ${dataReadSizes.join(",")}`);
 });

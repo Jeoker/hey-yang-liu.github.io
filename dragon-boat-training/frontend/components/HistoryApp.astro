@@ -53,6 +53,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       </div>
       <div data-history-years></div>
       <p class="dragon-boat-empty-state" data-history-empty hidden>目前还没有公开归档的赛季。</p>
+      <button type="button" class="dragon-boat-secondary-button" data-history-more-seasons hidden>加载更早赛季</button>
     </section>
 
     <section class="dragon-boat-history-season" data-history-season hidden aria-labelledby="history-season-title">
@@ -60,6 +61,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       <h2 id="history-season-title" data-season-title></h2>
       <p class="dragon-boat-history-meta" data-season-meta></p>
       <div class="dragon-boat-history-cards" data-history-practices></div>
+      <button type="button" class="dragon-boat-secondary-button" data-history-more-practices hidden>加载更早训练</button>
     </section>
 
     <section class="dragon-boat-history-detail" data-history-detail hidden aria-labelledby="history-practice-title">
@@ -96,10 +98,12 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const historyList = q<HTMLElement>("[data-history-list]");
   const years = q<HTMLElement>("[data-history-years]");
   const empty = q<HTMLElement>("[data-history-empty]");
+  const moreSeasons = q<HTMLButtonElement>("[data-history-more-seasons]");
   const seasonSection = q<HTMLElement>("[data-history-season]");
   const seasonTitle = q<HTMLElement>("[data-season-title]");
   const seasonMeta = q<HTMLElement>("[data-season-meta]");
   const practiceCards = q<HTMLElement>("[data-history-practices]");
+  const morePractices = q<HTMLButtonElement>("[data-history-more-practices]");
   const detail = q<HTMLElement>("[data-history-detail]");
   const practiceTitle = q<HTMLElement>("[data-practice-title]");
   const practiceMeta = q<HTMLElement>("[data-practice-meta]");
@@ -111,6 +115,12 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const requestedSeason = query.get("season_id") || "";
   const requestedPractice = query.get("practice_id") || "";
   let client: DragonBoatApiClient | null = null;
+  let directoryEntries: any[] = [];
+  let directoryCursor = "";
+  let loadedSeason: any = null;
+  let seasonPractices: any[] = [];
+  let seasonCursor = "";
+  let historyLoading = false;
 
   function setStatus(state: "pending" | "ready" | "error", text: string) {
     if (badge) { badge.dataset.state = state; badge.textContent = state === "ready" ? "已连接" : state === "error" ? "读取失败" : "正在读取"; }
@@ -181,6 +191,27 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     });
   }
 
+  async function loadDirectoryPage(append = false) {
+    const response = await client!.get("historySeasons", {
+      limit: 30, ...(append && directoryCursor ? { cursor: directoryCursor } : {})
+    });
+    directoryEntries = append ? directoryEntries.concat(response.data.seasons || []) : (response.data.seasons || []);
+    directoryCursor = response.data.next_cursor || "";
+    renderDirectory(directoryEntries);
+    if (moreSeasons) moreSeasons.hidden = !directoryCursor;
+  }
+
+  async function loadSeasonPage(append = false) {
+    const response = await client!.get("seasonHistory", {
+      season_id: requestedSeason, limit: 30, ...(append && seasonCursor ? { cursor: seasonCursor } : {})
+    });
+    loadedSeason = response.data.season;
+    seasonPractices = append ? seasonPractices.concat(response.data.practices || []) : (response.data.practices || []);
+    seasonCursor = response.data.next_cursor || "";
+    renderSeason({ season: loadedSeason, practices: seasonPractices });
+    if (morePractices) morePractices.hidden = !seasonCursor;
+  }
+
   function renderPractice(data: any) {
     if (!detail || !practiceTitle || !practiceMeta || !seatPlan) return;
     detail.hidden = false;
@@ -207,15 +238,18 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   async function load() {
     if (!apiUrl) return setStatus("error", "训练服务地址尚未配置。");
     if (requestedPractice && !requestedSeason) return setStatus("error", "历史训练链接缺少赛季编号。");
+    if (historyLoading) return;
+    historyLoading = true;
     try {
       client ||= new DragonBoatApiClient({ baseUrl: apiUrl, timeoutMs: 30000 });
       setStatus("pending", "正在读取公开归档……");
-      const directory = await client.get("historySeasons");
-      renderDirectory(directory.data.seasons);
-      if (requestedSeason) {
-        const season = await client.get("seasonHistory", { season_id: requestedSeason });
-        renderSeason(season.data);
-      }
+      directoryEntries = [];
+      directoryCursor = "";
+      loadedSeason = null;
+      seasonPractices = [];
+      seasonCursor = "";
+      await loadDirectoryPage(false);
+      if (requestedSeason && !requestedPractice) await loadSeasonPage(false);
       if (requestedPractice) {
         const practice = await client.get("archivedPractice", {
           season_id: requestedSeason, practice_id: requestedPractice
@@ -226,9 +260,27 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     } catch (error) {
       const code = error instanceof DragonBoatApiError ? error.code : "UNKNOWN_ERROR";
       setStatus("error", code === "HISTORY_NOT_FOUND" ? "没有找到这项公开归档。" : "历史资料暂时无法读取，请稍后重试。");
+    } finally {
+      historyLoading = false;
     }
   }
 
   retry?.addEventListener("click", load);
+  moreSeasons?.addEventListener("click", async () => {
+    if (!directoryCursor || historyLoading) return;
+    historyLoading = true;
+    moreSeasons.disabled = true;
+    try { await loadDirectoryPage(true); }
+    catch (error) { setStatus("error", "更早的赛季暂时无法读取，请稍后重试。"); }
+    finally { historyLoading = false; moreSeasons.disabled = false; }
+  });
+  morePractices?.addEventListener("click", async () => {
+    if (!seasonCursor || historyLoading) return;
+    historyLoading = true;
+    morePractices.disabled = true;
+    try { await loadSeasonPage(true); }
+    catch (error) { setStatus("error", "更早的训练暂时无法读取，请稍后重试。"); }
+    finally { historyLoading = false; morePractices.disabled = false; }
+  });
   load();
 </script>

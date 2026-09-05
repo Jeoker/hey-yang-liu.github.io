@@ -84,6 +84,40 @@ function getSheetRecords_(sheetName) {
   return result;
 }
 
+function mapSheetRowsToRecords_(headers, rows, startRow) {
+  return rows.map(function (row, rowIndex) {
+    var record = { _rowNumber: Number(startRow) + rowIndex };
+    headers.forEach(function (header, columnIndex) {
+      record[header] = row[columnIndex];
+    });
+    return record;
+  });
+}
+
+function getSheetRecordsBefore_(sheetName, beforeRow, maximumRows) {
+  var sheet = getSystemSheet_(sheetName);
+  var headers = DRAGON_BOAT_SHEET_HEADERS_[sheetName];
+  var upperExclusive = Math.min(Math.max(2, Number(beforeRow || sheet.getLastRow() + 1)), sheet.getLastRow() + 1);
+  var count = Math.min(Math.max(0, Number(maximumRows || 0)), Math.max(0, upperExclusive - 2));
+  if (!count) return { records: [], before_row: upperExclusive, has_more: false };
+  var startRow = upperExclusive - count;
+  var rows = sheet.getRange(startRow, 1, count, headers.length).getValues();
+  return {
+    records: mapSheetRowsToRecords_(headers, rows, startRow).reverse(),
+    before_row: startRow,
+    has_more: startRow > 2
+  };
+}
+
+function getSheetRecordAt_(sheetName, rowNumber) {
+  var sheet = getSystemSheet_(sheetName);
+  var headers = DRAGON_BOAT_SHEET_HEADERS_[sheetName];
+  var resolvedRow = Math.floor(Number(rowNumber || 0));
+  if (resolvedRow < 2 || resolvedRow > sheet.getLastRow()) return null;
+  return mapSheetRowsToRecords_(headers,
+    sheet.getRange(resolvedRow, 1, 1, headers.length).getValues(), resolvedRow)[0] || null;
+}
+
 function cloneDragonBoatRecords_(records) {
   return JSON.parse(JSON.stringify(records));
 }
@@ -100,6 +134,22 @@ function appendSheetRecord_(sheetName, record) {
   record._rowNumber = rowNumber;
   if (dragonBoatRecordCache_) delete dragonBoatRecordCache_["system:" + sheetName];
   return record;
+}
+
+function appendSheetRecords_(sheetName, records) {
+  if (!Array.isArray(records) || !records.length) return [];
+  var sheet = getSystemSheet_(sheetName);
+  var headers = DRAGON_BOAT_SHEET_HEADERS_[sheetName];
+  var startRow = sheet.getLastRow() + 1;
+  var values = records.map(function (record) {
+    return headers.map(function (header) {
+      return record[header] === undefined || record[header] === null ? "" : String(record[header]);
+    });
+  });
+  sheet.getRange(startRow, 1, values.length, headers.length).setNumberFormat("@").setValues(values);
+  records.forEach(function (record, index) { record._rowNumber = startRow + index; });
+  if (dragonBoatRecordCache_) delete dragonBoatRecordCache_["system:" + sheetName];
+  return records;
 }
 
 function updateSheetRecord_(sheetName, record) {

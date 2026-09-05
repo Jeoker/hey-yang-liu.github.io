@@ -75,6 +75,7 @@ test("setup creates a private system spreadsheet when no ID is configured", asyn
     "PracticeArchives",
     "SeasonArchives",
     "PublicHistoryIndex",
+    "PublicHistorySeasons",
     "HistoryCorrections"
   ]);
 });

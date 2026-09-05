@@ -222,7 +222,8 @@ function publishDueTrainingWeeks() {
     var archive = runDueArchivesUnlocked_();
     return { published_count: publishedCount, frozen_seat_plan_count: archive.frozen_count,
       practice_archived_count: archive.practice_archived_count,
-      season_archived_count: archive.season_archived_count, checked_at: now.toISOString() };
+      season_archived_count: archive.season_archived_count, archive_work_units: archive.work_units,
+      archive_has_more: archive.has_more, checked_at: now.toISOString() };
   });
 }
 

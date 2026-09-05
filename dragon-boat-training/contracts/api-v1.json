@@ -35,6 +35,13 @@
       "private_archive": "The existing five-minute maintenance trigger freezes due seating plans and writes verified private snapshots into one automatically created Spreadsheet per archive year. A completed season is marked ARCHIVED only after its private snapshot verifies.",
       "public_history": "Only uncancelled published practices are projected. A cancelled practice remains an internal tombstone and is absent from current pages, private season snapshots and public history. Frozen seat plans expose display names without member IDs; no published revision is represented explicitly as UNPUBLISHED.",
       "corrections": "After the strict end_at plus 24-hour boundary, the frozen snapshot is immutable. Authenticated managers may append versioned one-line correction notes; retries use the common request journal and cannot duplicate a note."
+    },
+    "p5_performance": {
+      "service_since": "0.9.0-p5-performance",
+      "compatibility": "Additive pagination metadata and internal batching; write actions keep the same idempotency, lock and version semantics.",
+      "public_reads": "History directories and frozen practice snapshots use bounded, invalidated script caches. Directory and season listings accept limit and cursor and return next_cursor and total_count.",
+      "management_reads": "Audit history is read backwards in bounded ranges and returns an independent cursor for older rows.",
+      "maintenance": "The five-minute freeze and archive worker uses a configurable shared work-unit limit, time budget and resumable freeze and season cursors."
     }
   },
   "transport": {
@@ -364,17 +371,17 @@
       "methods": ["GET"],
       "authentication": "public",
       "writes_data": false,
-      "request_fields": [],
-      "response_fields": ["seasons", "generated_at"],
-      "notes": "Lists published season honor-wall summaries grouped by archive year."
+      "request_fields": ["optional limit", "optional cursor"],
+      "response_fields": ["seasons", "next_cursor", "total_count", "generated_at"],
+      "notes": "Lists published season honor-wall summaries grouped by archive year. Defaults to 30 and returns at most 100 per page."
     },
     "seasonHistory": {
       "methods": ["GET"],
       "authentication": "public",
       "writes_data": false,
-      "request_fields": ["season_id"],
-      "response_fields": ["season", "practices", "generated_at"],
-      "notes": "Returns uncancelled archived practice summaries for one published season."
+      "request_fields": ["season_id", "optional limit", "optional cursor"],
+      "response_fields": ["season", "practices", "next_cursor", "total_count", "generated_at"],
+      "notes": "Returns uncancelled archived practice summaries for one published season. Defaults to 30 and returns at most 100 per page."
     },
     "archivedPractice": {
       "methods": ["GET"],
@@ -411,9 +418,9 @@
       "methods": ["POST"],
       "authentication": "session_token",
       "writes_data": false,
-      "request_fields": ["session_token", "season_id", "optional limit"],
-      "response_fields": ["season_id", "events", "generated_at"],
-      "notes": "Combines season and matching system audit events, newest first, with a maximum limit of 200."
+      "request_fields": ["session_token", "season_id", "optional limit", "optional cursor"],
+      "response_fields": ["season_id", "events", "next_cursor", "scan_cap_reached", "generated_at"],
+      "notes": "Combines season and matching system audit events newest first. Reads bounded reverse ranges, returns at most 100 per page and uses next_cursor for older records."
     }
   },
   "management_errors": ["COACH_CODE_INVALID", "LOGIN_RATE_LIMITED", "SESSION_INVALID", "SESSION_EXPIRED", "SESSION_REVOKED", "IDEMPOTENCY_CONFLICT", "SERVICE_BUSY", "CONFIGURATION_REQUIRED", "CONFIGURATION_ERROR", "RECOVERY_REQUIRED", "VERSION_CONFLICT", "SEASON_NOT_FOUND", "SEASON_NOT_OPEN", "BINDING_LOCKED", "ARCHIVE_NOT_DUE", "HISTORY_NOT_READY", "HISTORY_NOT_FOUND"],

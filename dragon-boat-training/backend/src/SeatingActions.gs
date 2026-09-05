@@ -830,11 +830,3 @@ function freezeDueSeatPlansForSeason_(season) {
   });
   return frozenCount;
 }
-
-function freezeDueSeatPlans_() {
-  var frozenCount = 0;
-  getSheetRecords_("Seasons").forEach(function (season) {
-    frozenCount += freezeDueSeatPlansForSeason_(season);
-  });
-  return frozenCount;
-}
