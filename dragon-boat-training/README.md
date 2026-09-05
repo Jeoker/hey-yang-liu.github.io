@@ -1,6 +1,6 @@
 # Dragon Boat Training
 
-> 状态：P0、P1“建季并开放一周”、P2“报名与维护”及 P2.1 已完成对应真实验收。P3 三端实现已部署为 Apps Script Version 11／服务 `0.6.1-p3`，真实 Google API、Pages 核心浏览器流程及本轮安全清理／退出已通过；桌面拖拽和精确 24 小时边界保留各自的验证限制。P1 剩余工作和 P4 继续按 Epic 推进，证据与接续位置见[当前进度](CURRENT-STATUS.md)。
+> 实现进度、部署版本、验收边界和接续位置统一见[当前进度](CURRENT-STATUS.md)。
 > 更新：2026-09-04
 
 为龙舟队提供按赛季入队、每周排期与训练报名、候补、排座和历史荣誉墙。网站部署于 GitHub Pages，业务由 Google Apps Script 处理，数据保存在 Google Sheets。

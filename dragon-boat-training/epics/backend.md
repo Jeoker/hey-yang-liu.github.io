@@ -1,6 +1,6 @@
 # BE：后端与数据服务
 
-> 状态：P0、P1 已交付范围、P2 及 P2.1 已通过真实验收。BE-06 与 BE-05 的 P3 联动已经实现并部署到 Version 11／服务 `0.6.1-p3`，本地测试、真实 Google API、Pages 核心联调及安全清理／退出通过；公开角色投影与受保护管理角色 ID 的隔离已实测。BE-03／BE-04 的 P1 剩余工作及 BE-07 的 P4 归档仍未完成，验证边界见[当前进度](../CURRENT-STATUS.md)。
+> 实现进度、部署版本、验收边界和接续位置统一见[当前进度](../CURRENT-STATUS.md)。
 
 [Epic 总览](README.md) · [产品规则](../README.md) · [后端规格](../google-sheets-backend-spec.md)
 
