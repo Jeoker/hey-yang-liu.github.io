@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
+import { webcrypto } from "node:crypto";
 import ts from "typescript";
 import { DragonBoatApiError } from "../frontend/lib/api-client.js";
 import { validPracticeView, olderPracticeView } from "../frontend/lib/current-view.js";
@@ -12,7 +13,7 @@ const source = await fs.readFile(new URL("../frontend/components/CoachModeApp.as
 const script = source.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;$/gm, "");
 const compiled = ts.transpileModule(script, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 
-function makeHarness({ mutate, readWorkspace, seating = false } = {}) {
+function makeHarness({ mutate, readWorkspace, login, bootstrap, seating = false } = {}) {
   const elements = new Map();
   const timers = new Map();
   let timerCounter = 0;
@@ -102,7 +103,10 @@ function makeHarness({ mutate, readWorkspace, seating = false } = {}) {
     }
     async post(action, payload, options) {
       state.calls.push(structuredClone({ action, payload, options }));
-      if (action === "coachBootstrap") return envelope({ panels: [], coach: { display_name: "Test Coach" }, session: { expires_at: "2099-12-31T00:00:00Z" }, default_season_id: season.season_id, seasons: [season] });
+      if (action === "coachBootstrap") {
+        if (bootstrap) await bootstrap(state);
+        return envelope({ panels: [], coach: { display_name: "Test Coach" }, session: { expires_at: "2099-12-31T00:00:00Z" }, default_season_id: season.season_id, seasons: [season] });
+      }
       if (action === "getSeasonManagement") return envelope({ season, is_default: true, members: state.members, templates: [], weeks: [{ week: { week_id: "week_test", status: "OPENED", week_start_date: "2099-09-07", week_version: 1 }, practices: [practice] }] });
       if (action === "listSeasonMembers") return envelope({ season_id: season.season_id, roster_version: season.roster_version, members: state.members });
       if (action === "getMemberWorkspace") {
@@ -113,7 +117,10 @@ function makeHarness({ mutate, readWorkspace, seating = false } = {}) {
         ...(seating ? { seating: state.seatingWorkspace() } : {}) });
       }
       if (action === "getSeatingWorkspace") return envelope(state.seatingWorkspace());
-      if (action === "coachLogin") return envelope({ session_token: "session_new", session: { expires_at: "2099-12-31T00:00:00Z" } });
+      if (action === "coachLogin") {
+        if (login) await login(state, payload, options);
+        return envelope({ session_token: "session_new", session: { expires_at: "2099-12-31T00:00:00Z" } });
+      }
       if (action === "coachLogout") return envelope({});
       if (mutate) return mutate(state, action, payload, options, envelope);
       throw new Error(`Unexpected POST ${action}`);
@@ -123,7 +130,7 @@ function makeHarness({ mutate, readWorkspace, seating = false } = {}) {
     constructor(form) { this.form = form; }
     entries() { return [...this.form.fields.entries()].map(([key, value]) => [key, value.value]); }
   }
-  const context = vm.createContext({ document, Date, Intl, Error, console, structuredClone, FormData: FormDataMock,
+  const context = vm.createContext({ document, Date, Intl, Error, console, structuredClone, TextEncoder, crypto: webcrypto, FormData: FormDataMock,
     window: {
       setTimeout(callback) { const id = ++timerCounter; timers.set(id, callback); return id; },
       clearTimeout(id) { timers.delete(id); },
@@ -131,7 +138,8 @@ function makeHarness({ mutate, readWorkspace, seating = false } = {}) {
     },
     DragonBoatApiClient: Client, DragonBoatApiError,
     createRequestId: () => `request_${++state.requestCounter}`,
-    loadCoachSession: () => ({ token: "session_old" }), saveCoachSession() {}, clearCoachSession() {},
+    loadCoachSession: () => ({ token: "session_old" }),
+    saveCoachSession(token) { state.savedSession = token; }, clearCoachSession() { state.savedSession = null; },
     isCoachSessionError: (error) => ["SESSION_INVALID", "SESSION_EXPIRED", "SESSION_REVOKED"].includes(error?.code),
     renderSignupList, signupResultText, renderSeatPlan, validPracticeView, olderPracticeView });
   vm.runInContext(compiled, context);
@@ -225,6 +233,68 @@ test("Coach login loads only metadata until the selected workspace is opened", a
   assert.equal(h.state.practiceReads, 0);
   await ready(h);
   assert.deepEqual(h.state.calls.map(call => call.action), ["coachBootstrap", "getMemberWorkspace"]);
+});
+
+test("uncertain Coach login retries the same request without retaining the Code in the input", async () => {
+  let attempts = 0;
+  const h = makeHarness({ login: () => {
+    if (++attempts < 3) throw new DragonBoatApiError("REQUEST_TIMEOUT", "unknown", { retryable: true });
+  } });
+  await ready(h);
+  await h.element("logout-button").emit("click");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    h.element("coach-code").value = "test_code";
+    const submission = h.element("login-form").emit("submit");
+    assert.equal(h.element("coach-code").value, "");
+    await h.element("login-form").emit("submit"); // repeated submission while hashing/sending is ignored
+    await submission;
+    if (attempt < 2) assert.match(h.element("login-status").textContent, /重新输入相同 Coach Code.*原请求/);
+  }
+  const logins = h.state.calls.filter(call => call.action === "coachLogin");
+  assert.equal(logins.length, 3);
+  assert.equal(new Set(logins.map(call => call.options.requestId)).size, 1);
+  assert.equal(h.state.savedSession, "session_new");
+  assert.equal(h.element("login-panel").hidden, true);
+  await h.element("logout-button").emit("click");
+  h.element("coach-code").value = "test_code";
+  await h.element("login-form").emit("submit");
+  assert.notEqual(h.state.calls.filter(call => call.action === "coachLogin").at(-1).options.requestId, logins[0].options.requestId);
+});
+
+test("a changed Code or a definitive rejection starts a new login request", async () => {
+  let attempts = 0;
+  const h = makeHarness({ login: () => {
+    if (++attempts === 1) throw new DragonBoatApiError("INVALID_RESPONSE", "unknown", { retryable: true });
+    if (attempts === 2) throw new DragonBoatApiError("COACH_CODE_INVALID", "invalid");
+  } });
+  await ready(h);
+  await h.element("logout-button").emit("click");
+  for (const code of ["first_code", "second_code", "second_code"]) {
+    h.element("coach-code").value = code;
+    await h.element("login-form").emit("submit");
+  }
+  const logins = h.state.calls.filter(call => call.action === "coachLogin");
+  assert.equal(new Set(logins.map(call => call.options.requestId)).size, 3);
+  assert.equal(h.state.savedSession, "session_new");
+});
+
+test("a bootstrap read failure after login retains the session and retries only the read", async () => {
+  let reads = 0;
+  const h = makeHarness({ bootstrap: () => {
+    if (++reads === 2) throw new DragonBoatApiError("REQUEST_TIMEOUT", "read timeout", { retryable: true });
+  } });
+  await ready(h);
+  await h.element("logout-button").emit("click");
+  h.element("coach-code").value = "test_code";
+  await h.element("login-form").emit("submit");
+  assert.equal(h.state.savedSession, "session_new");
+  assert.equal(h.element("login-panel").hidden, true);
+  assert.equal(h.element("workspace").hidden, false);
+  assert.match(h.element("management-status").textContent, /登录已成功.*无需重新登录/);
+  await h.element("refresh-button").emit("click");
+  await settled(() => h.element("season-picker").children.some(option => option.value === "season_test"));
+  assert.equal(h.state.calls.filter(call => call.action === "coachLogin").length, 1);
+  assert.equal(reads, 3);
 });
 
 test("Coach commit view updates signup and links without another read", async () => {

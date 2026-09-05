@@ -398,6 +398,10 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const pendingRequests = new Map<string, { action: string; payload: Record<string, unknown>; requestId: string }>();
   let managementWriting = false;
   let sessionToken = "";
+  // Keep only an in-memory fingerprint and request ID for an uncertain login.
+  // The user re-enters the Code; neither the Code nor its digest is persisted.
+  let pendingLogin: { codeDigest: string; requestId: string } | null = null;
+  let loginInProgress = false;
   let currentSeasonData: any = null;
   let bindingValidated = false;
   let seasonReadVersion = 0;
@@ -477,7 +481,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       SEASON_NOT_OPEN: "赛季当前不可修改，请刷新赛季状态。",
       SERVICE_BUSY: "系统正在处理其他修改，请稍后使用同一请求重试。",
       NETWORK_ERROR: "暂时无法连接训练服务。",
-      REQUEST_TIMEOUT: "请求超时；再次点击会沿用同一请求编号确认结果。"
+      REQUEST_TIMEOUT: "请求超时，暂时无法确认结果。"
     };
     return messages[code] || (error instanceof Error ? error.message : "操作没有完成，请稍后重试。");
   }
@@ -1967,29 +1971,47 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
 
   loginForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!client || !codeInput) return;
+    if (!client || !codeInput || loginInProgress) return;
     const coachCode = codeInput.value;
     codeInput.value = "";
+    loginInProgress = true;
     if (loginButton) loginButton.disabled = true;
     setStatus(loginStatus, "正在验证……", "pending");
     try {
-      const response = await client.post("coachLogin", { coach_code: coachCode });
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(coachCode));
+      const codeDigest = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+      if (!pendingLogin || pendingLogin.codeDigest !== codeDigest) {
+        pendingLogin = { codeDigest, requestId: createRequestId() };
+      }
+      const response = await client.post("coachLogin", { coach_code: coachCode }, { requestId: pendingLogin.requestId });
+      pendingLogin = null;
       sessionToken = response.data.session_token;
       saveCoachSession(sessionToken, response.data.session);
       if (loginPanel) loginPanel.hidden = true;
       if (workspace) workspace.hidden = false;
-      await refreshBootstrap();
       setStatus(loginStatus, "");
+      try {
+        await refreshBootstrap();
+      } catch (error) {
+        if (!protectedError(error)) setStatus(managementStatus,
+          `登录已成功，但赛季入口读取失败。请点击「刷新」，无需重新登录。${messageForError(error)}`, "error");
+      }
     } catch (error) {
+      const uncertain = !(error instanceof DragonBoatApiError) || error.retryable || ["INVALID_RESPONSE", "CONTRACT_MISMATCH"].includes(error.code);
+      if (!uncertain) pendingLogin = null;
       clearCoachSession();
-      showLogin(messageForError(error));
+      showLogin(`${messageForError(error)}${pendingLogin
+        ? " 请重新输入相同 Coach Code 后登录；本页会沿用原请求确认结果。"
+        : " 请重新输入 Coach Code 后登录。"}`);
     } finally {
+      loginInProgress = false;
       if (loginButton) loginButton.disabled = false;
     }
   });
 
   logoutButton?.addEventListener("click", async () => {
     const token = sessionToken;
+    pendingLogin = null;
     clearCoachSession();
     showLogin("本机已退出 Coach Mode。", "ready");
     if (!client || !token) return;
