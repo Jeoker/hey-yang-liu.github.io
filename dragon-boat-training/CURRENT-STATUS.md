@@ -1,18 +1,18 @@
 # 当前进度与接续入口
 
-> 更新：2026-09-04
+> 更新：2026-09-05
 
 本文件记录当前交付状态、验证边界和下一步。产品规则以[项目说明](README.md)为准，职责和阶段边界见[Epic 总览](epics/README.md)；详细证据保留在各阶段验收报告，不在其他规格文件重复维护进度摘要。
 
 ## 当前基线
 
-- **P1 剩余管理功能正在补齐**：赛季日期／默认值、单场预览编辑与取消、公开前加场、预约开放页面及精确完成状态已编写，并通过全量 143／143 本地测试及前后端构建；候选后端服务为 `0.7.0-p1-management`，契约保持兼容。真实部署与页面验收尚未完成，不能关闭 P1。细节见[P1 管理补齐验收](tests/P1-MANAGEMENT-ACCEPTANCE.md)。以下版本与真实测试数据仍是上一正式部署基线。
+- **P1 管理功能已部署，正在完成最后页面验收与清理**：赛季日期／默认值、单场预览编辑与取消、公开前加场、预约开放及精确完成状态已实现；真实 API、Google 预约触发和主要页面流程通过。赛季变更改为页面内确认，最终保存／默认切换与退出正在补验，尚不关闭 P1。细节及测试断言修正见[P1 管理补齐验收](tests/P1-MANAGEMENT-ACCEPTANCE.md)。
 
 - P0、P1“建季并开放一周”、P2“报名与维护”及 P2.1 等待体验优化已完成对应真实验收。**P3 阶段验收通过**：核心真实 API、页面流程及双窗口版本冲突恢复通过，用户已在正式 Coach Mode 人工确认鼠标拖动成功。P3 完成不代表 P1 剩余工作、P4 或整个 Epic 完成。
 - [队员页面](https://jeoker.github.io/hey-yang-liu.github.io/dragon-boat-training/)和 [Coach Mode](https://jeoker.github.io/hey-yang-liu.github.io/dragon-boat-training/coach/) 使用同一个 Apps Script 后端。GitHub Pages 只提供静态网页，Google Sheets 仍是唯一业务数据源，没有十分钟延迟写回或独立实时数据库。
-- Apps Script 沿用原 Web App URL、Version 11、服务 `0.6.1-p3` 和契约 `2026-09-02.p2.1`。本轮公开 health 返回 HTTP 200；它不能代替登录和写入验收。
-- 最新功能提交 `360b9a6`，包括登录超时恢复和响应完整性保护；[Pages run 33937965621](https://github.com/jeoker/hey-yang-liu.github.io/actions/runs/33937965621) 成功。此次只有前端修复，不需要重新部署后端。
-- 本地 **121／121** 测试通过，Astro 检查为零诊断、静态构建生成三个页面；后端单文件构建通过。新增登录回归验证同 Code 重试原编号、连点保护、换 Code／明确失败使用新编号、不完整成功响应保留原请求，以及登录后读取失败只重读。
+- Apps Script 沿用原 Web App URL，当前为 **Version 12、服务 `0.7.0-p1-management`**，契约保持 `2026-09-02.p2.1`。health、真实登录与受保护写入已验证。
+- P1 功能提交 `f963905` 的 [Pages run 33942392404](https://github.com/Jeoker/hey-yang-liu.github.io/actions/runs/33942392404) 成功；本轮页面内确认和提示修正正在追加部署，不改变后端版本。
+- 本地 **145／145** 测试通过，Astro 检查为零诊断、静态构建生成三个页面，后端单文件构建通过。时间边界、保存中断恢复、预览失效、过期重登与原请求重试均有专项回归。
 - Script ID、私有 Spreadsheet ID、Coach Code、会话令牌和服务端 secret 均不写入仓库。
 
 ## 写入与恢复约束

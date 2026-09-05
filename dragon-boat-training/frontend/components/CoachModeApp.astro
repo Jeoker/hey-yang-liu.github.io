@@ -108,9 +108,18 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
             <label>调整开始日期<input name="start_date" type="date" required /></label>
             <label>调整最后有效日<input name="end_date" type="date" required /></label>
             <p class="dragon-boat-field-wide">按本季时区计算；不更换名单或表单。已公开历史及有效训练必须仍在日期范围内。</p>
-            <button type="submit" class="dragon-boat-secondary-button">保存赛季日期</button>
+            <button type="submit" class="dragon-boat-secondary-button">检查赛季日期变更</button>
           </form>
           <button type="button" class="dragon-boat-secondary-button" data-set-default-season>设为首页默认赛季</button>
+          <section class="dragon-boat-management-block" data-season-change-block hidden>
+            <h3>确认赛季变更</h3>
+            <p data-season-change-description aria-live="polite"></p>
+            <label><input type="checkbox" data-season-change-confirm />我已核对赛季变更；既有名单、训练与其他赛季链接保持不变。</label>
+            <div class="dragon-boat-button-row">
+              <button type="button" class="dragon-boat-primary-button" data-season-change-save disabled>确认保存赛季变更</button>
+              <button type="button" class="dragon-boat-secondary-button" data-season-change-cancel>放弃这次赛季变更</button>
+            </div>
+          </section>
         </section>
 
         <section class="dragon-boat-management-block" data-binding-block hidden>
@@ -349,6 +358,11 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const seasonSync = q<HTMLElement>("[data-season-sync]");
   const seasonScheduleForm = q<HTMLFormElement>("[data-season-schedule-form]");
   const setDefaultSeason = q<HTMLButtonElement>("[data-set-default-season]");
+  const seasonChangeBlock = q<HTMLElement>("[data-season-change-block]");
+  const seasonChangeDescription = q<HTMLElement>("[data-season-change-description]");
+  const seasonChangeConfirm = q<HTMLInputElement>("[data-season-change-confirm]");
+  const seasonChangeSave = q<HTMLButtonElement>("[data-season-change-save]");
+  const seasonChangeCancel = q<HTMLButtonElement>("[data-season-change-cancel]");
   const practiceEditBlock = q<HTMLElement>("[data-practice-edit-block]");
   const practiceEditTitle = q<HTMLElement>("[data-practice-edit-title]");
   const practiceEditForm = q<HTMLFormElement>("[data-practice-edit-form]");
@@ -441,6 +455,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   let editingSchedule: any = null;
   let schedulePreview: any = null;
   let schedulePreviewSequence = 0;
+  let seasonChange: { action: string; input: Record<string, any>; message: string } | null = null;
   let bindingValidated = false;
   let seasonReadVersion = 0;
   let p2ReadVersion = 0;
@@ -686,6 +701,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   }
 
   function renderSeason() {
+    closeSeasonChange();
     if (!currentSeasonData) return clearSeasonView();
     const season = currentSeasonData.season;
     if (seasonDetail) seasonDetail.hidden = false;
@@ -1726,6 +1742,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   }
 
   function closeScheduleEditor() {
+    closeSeasonChange();
     invalidateSchedulePreview();
     editingSchedule = null;
     if (practiceEditBlock) practiceEditBlock.hidden = true;
@@ -1780,7 +1797,10 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       currentSeasonData.is_default = data.default_season_id === seasonId;
     }
     if (seasonPicker) for (const option of Array.from(seasonPicker.options || [])) {
-      if (data.default_season_id !== undefined) option.textContent = (option.textContent || "").replace(" · 首页默认", "");
+      if (data.default_season_id !== undefined) {
+        option.textContent = (option.textContent || "").replace(" · 首页默认", "")
+          + (option.value === data.default_season_id ? " · 首页默认" : "");
+      }
       if (option.value === seasonId) option.textContent = `${currentSeasonData.season.name} · ${currentSeasonData.season.status}${currentSeasonData.is_default ? " · 首页默认" : ""}`;
     }
     closeScheduleEditor();
@@ -1843,23 +1863,51 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     await submitScheduleChange(input.change === "CANCEL" ? "cancelPractice" : "updatePractice", {
       ...input, week_version: data.week_version, practice_version: data.practice_version,
       signup_version: data.signup_version, preview_token: data.preview_token
-    }, input.change === "CANCEL" ? "训练已取消或移除，历史和其他场次保持不变。" : "训练安排已保存，报名和座位保持不变。队员下次刷新时可看到新安排。");
+    }, input.change === "CANCEL" ? "训练已取消或移除，历史和其他场次保持不变。" : "训练安排已保存，报名和座位保持不变。公开场次在队员刷新后显示新安排；私有草稿仍不公开。");
     invalidateSchedulePreview();
   });
-  seasonScheduleForm?.addEventListener("submit", async (event) => {
+  function closeSeasonChange() {
+    seasonChange = null;
+    if (seasonChangeBlock) seasonChangeBlock.hidden = true;
+    if (seasonChangeDescription) seasonChangeDescription.textContent = "";
+    if (seasonChangeConfirm) seasonChangeConfirm.checked = false;
+    if (seasonChangeSave) seasonChangeSave.disabled = true;
+  }
+
+  function reviewSeasonChange(action: string, input: Record<string, any>, description: string, message: string) {
+    closeSeasonChange();
+    seasonChange = { action, input, message };
+    if (seasonChangeDescription) seasonChangeDescription.textContent = description;
+    if (seasonChangeBlock) seasonChangeBlock.hidden = false;
+  }
+
+  seasonScheduleForm?.addEventListener("input", closeSeasonChange);
+  seasonChangeCancel?.addEventListener("click", closeSeasonChange);
+  seasonChangeConfirm?.addEventListener("change", () => {
+    if (seasonChangeSave) seasonChangeSave.disabled = !seasonChange || !seasonChangeConfirm.checked || managementWriting;
+  });
+  seasonChangeSave?.addEventListener("click", async () => {
+    const change = seasonChange;
+    if (!change || !seasonChangeConfirm?.checked || managementWriting) return;
+    if (!currentSeasonData || seasonPicker?.value !== change.input.season_id || currentSeasonData.season.season_id !== change.input.season_id) return closeSeasonChange();
+    if (seasonChangeSave) seasonChangeSave.disabled = true;
+    await submitScheduleChange(change.action, change.input, change.message);
+    if (seasonChange === change) closeSeasonChange();
+  });
+
+  seasonScheduleForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!currentSeasonData) return;
     const season = currentSeasonData.season;
     const values = formObject(seasonScheduleForm);
-    if (!window.confirm(`把赛季日期从 ${season.start_date} 至 ${season.end_date} 改为 ${values.start_date} 至 ${values.end_date}（${season.timezone}）？训练、名单和表单绑定不变。`)) return;
-    await submitScheduleChange("updateSeasonSchedule", { season_id: season.season_id, season_version: season.season_version, ...values }, "赛季日期已更新。");
+    reviewSeasonChange("updateSeasonSchedule", { season_id: season.season_id, season_version: season.season_version, ...values },
+      `把「${season.name}」的赛季日期从 ${season.start_date} 至 ${season.end_date} 改为 ${values.start_date} 至 ${values.end_date}（${season.timezone}）。训练、名单和表单绑定不变；如已有训练超出新范围，服务器会拒绝保存。`, "赛季日期已更新。");
   });
-  setDefaultSeason?.addEventListener("click", async () => {
+  setDefaultSeason?.addEventListener("click", () => {
     if (!currentSeasonData) return;
     const season = currentSeasonData.season;
-    if (!window.confirm(`把「${season.name}」设为首页默认赛季？其他赛季的独立链接和名单保持不变。`)) return;
-    await submitScheduleChange("setDefaultSeason", { season_id: season.season_id, season_version: season.season_version,
-      settings_version: currentSeasonData.settings_version }, "首页默认赛季已切换；其他赛季数据没有迁移。");
+    reviewSeasonChange("setDefaultSeason", { season_id: season.season_id, season_version: season.season_version,
+      settings_version: currentSeasonData.settings_version }, `把「${season.name}」设为首页默认赛季。其他赛季的独立链接和名单保持不变。`, "首页默认赛季已切换；其他赛季数据没有迁移。");
   });
 
   function renderAdminWeeks(weeks: any[]) {

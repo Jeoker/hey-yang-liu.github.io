@@ -45,6 +45,7 @@ function makeHarness({ mutate, readWorkspace, readManagement, login, bootstrap, 
     emit(event, values = {}) { return this.listeners.get(event)?.({ preventDefault() {}, ...values }); }
     reset() { for (const field of this.fields.values()) field.value = field.defaultValue; }
     get selectedOptions() { return this.children.filter((child) => child.value === this.value); }
+    get options() { return this.children; }
   }
   for (const match of source.matchAll(/<(\w+)[^>]*\s(data-[\w-]+)(?:\s|>|=)/g)) {
     elements.set(`[${match[2]}]`, new Element(match[1]));
@@ -671,6 +672,67 @@ function previewEnvelope(state, payload, envelope) {
     confirmed_count: 1, waitlisted_count: 2, week_version: 1, practice_version: 1,
     signup_version: 3, preview_token: "reviewed_payload" });
 }
+
+test("P1 season changes require in-page review, invalidate changed inputs and preserve another default label", async () => {
+  const h = makeHarness({ mutate: async (state, action, payload, _options, envelope) => {
+    assert.ok(["updateSeasonSchedule", "setDefaultSeason"].includes(action));
+    if (action === "updateSeasonSchedule") {
+      state.season.end_date = payload.end_date;
+      state.season.season_version++;
+    }
+    return envelope({ view_status: "ready", current_view: { season: state.season,
+      default_season_id: action === "setDefaultSeason" ? "season_test" : "season_other", settings_version: 5 } });
+  } });
+  await readySchedule(h);
+  const picker = h.element("season-picker");
+  const other = picker.ownerDocument.createElement("option");
+  other.value = "season_other"; other.textContent = "Other season · OPEN · 首页默认";
+  picker.append(other);
+  const form = h.element("season-schedule-form");
+  form.elements.namedItem("end_date").value = "2099-12-30";
+  form.emit("submit");
+  assert.equal(h.state.calls.filter(c => c.action === "updateSeasonSchedule").length, 0);
+  assert.equal(h.element("season-change-save").disabled, true);
+  h.element("season-change-confirm").checked = true;
+  h.element("season-change-confirm").emit("change");
+  assert.equal(h.element("season-change-save").disabled, false);
+  form.elements.namedItem("end_date").value = "2099-12-29";
+  form.emit("input");
+  assert.equal(h.element("season-change-save").disabled, true);
+  assert.equal(h.element("season-change-block").hidden, true);
+  form.emit("submit");
+  h.element("season-change-confirm").checked = true;
+  await h.element("season-change-save").emit("click");
+  const dates = h.state.calls.filter(c => c.action === "updateSeasonSchedule");
+  assert.equal(dates.length, 1);
+  assert.equal(dates[0].payload.end_date, "2099-12-29");
+  assert.equal(dates[0].payload.season_version, 1);
+  assert.equal(other.textContent, "Other season · OPEN · 首页默认");
+  assert.equal(h.element("set-default-season").hidden, false);
+  h.element("set-default-season").emit("click");
+  h.element("season-change-cancel").emit("click");
+  assert.equal(h.state.calls.filter(c => c.action === "setDefaultSeason").length, 0);
+  h.element("set-default-season").emit("click");
+  h.element("season-change-confirm").checked = true;
+  await h.element("season-change-save").emit("click");
+  const change = h.state.calls.find(c => c.action === "setDefaultSeason");
+  assert.equal(change.payload.settings_version, 5);
+  assert.equal(other.textContent, "Other season · OPEN");
+  assert.equal(picker.options.find(o => o.value === "season_test").textContent, "Test season · OPEN · 首页默认");
+});
+
+test("P1 logout clears an unsubmitted season confirmation", async () => {
+  const h = makeHarness();
+  await readySchedule(h);
+  h.element("season-schedule-form").emit("submit");
+  assert.equal(h.element("season-change-block").hidden, false);
+  await h.element("logout-button").emit("click");
+  assert.equal(h.element("season-change-block").hidden, true);
+  assert.equal(h.element("season-change-description").textContent, "");
+  h.element("season-change-confirm").checked = true;
+  await h.element("season-change-save").emit("click");
+  assert.equal(h.state.calls.filter(c => c.action === "updateSeasonSchedule").length, 0);
+});
 test("P1 schedule preview is invalidated by edits and a late preview cannot restore it", async () => {
   let release;
   const h = makeHarness({ mutate: async (state, action, payload, _options, envelope) => {
