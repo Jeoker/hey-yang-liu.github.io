@@ -115,10 +115,11 @@ test("P1 preview detects intervening signups and accepted changes preserve queue
   assert.equal(replay.practice.location, "New Dock");
   assert.equal(replay.current_view.practices[0].location, "Newest Dock");
   ok(f.send("cancelPractice", f.preview("CANCEL")));
-  assert.equal(ok(f.get()).weeks[0].practices[0].cancelled, true);
-  const cancelled = ok(f.get("practice", { practice_id: p.practice_id }));
-  assert.equal(cancelled.management_signup_open, false);
-  assert.equal(cancelled.signups.length, 2);
+  const publicAfterCancel = ok(f.get());
+  assert.equal(publicAfterCancel.weeks.length, 1);
+  assert.equal(publicAfterCancel.weeks[0].practices.some((item) => item.practice_id === p.practice_id), false);
+  fails(f.get("practice", { practice_id: p.practice_id }), "PRACTICE_NOT_PUBLIC");
+  assert.equal(f.management().weeks[0].practices.find((item) => item.practice_id === p.practice_id).cancelled, true);
   for (const [name, rows] of Object.entries(before)) assert.deepEqual(sheetRecords(f.binding.runtimeSpreadsheet, name), rows, name);
 });
 

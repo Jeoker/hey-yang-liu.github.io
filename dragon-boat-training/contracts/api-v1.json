@@ -26,7 +26,15 @@
     "p1_management": {
       "service_since": "0.7.0-p1-management",
       "actions": ["setDefaultSeason", "updateSeasonSchedule", "updateScheduleTemplates", "confirmTrainingWeek", "publishTrainingWeek", "createPractice", "publishAdditionalPractice", "updatePractice", "cancelPractice"],
-      "notes": "P1M journal stores a deterministic plan/result before writes; recovery runs under the same script lock before other work. The result is immutable; optional current_view is generated after commit/replay. view_status=reload_required still means the write succeeded. Retry reading, not creating a new write. Season completion is recorded at the exact effective boundary and only clears its own default pointer. Archive files remain P4."
+      "notes": "P1M journal stores a deterministic plan/result before writes; recovery runs under the same script lock before other work. The result is immutable; optional current_view is generated after commit/replay. view_status=reload_required still means the write succeeded. Retry reading, not creating a new write. Season completion is recorded at the exact effective boundary and only clears its own default pointer. P4 handles due archive work from the same maintenance trigger."
+    },
+    "p4_archive": {
+      "service_since": "0.8.0-p4",
+      "compatibility": "Additive public GET and protected POST actions; the contract version remains compatible with earlier clients.",
+      "actions": ["historySeasons", "seasonHistory", "archivedPractice", "getArchiveManagement", "retrySeasonArchive", "appendHistoryCorrection", "listManagementAudit"],
+      "private_archive": "The existing five-minute maintenance trigger freezes due seating plans and writes verified private snapshots into one automatically created Spreadsheet per archive year. A completed season is marked ARCHIVED only after its private snapshot verifies.",
+      "public_history": "Only uncancelled published practices are projected. A cancelled practice remains an internal tombstone and is absent from current pages, private season snapshots and public history. Frozen seat plans expose display names without member IDs; no published revision is represented explicitly as UNPUBLISHED.",
+      "corrections": "After the strict end_at plus 24-hour boundary, the frozen snapshot is immutable. Authenticated managers may append versioned one-line correction notes; retries use the common request journal and cannot duplicate a note."
     }
   },
   "transport": {
@@ -166,7 +174,7 @@
       "request_fields": ["optional season_id"],
       "response_fields": ["state", "season", "weeks"],
       "writes_data": false,
-      "notes": "Returns only published practices. Draft weeks and unpublished additional practices are excluded."
+      "notes": "Returns only published, uncancelled practices. Draft weeks, unpublished additional practices and cancelled tombstones are excluded. An explicitly requested ARCHIVED season redirects capable clients to public history."
     },
     "members": {
       "methods": ["GET"],
@@ -342,7 +350,7 @@
       "request_fields": ["session_token", "season_id", "week_id", "practice_id", "week_version", "practice_version", "signup_version", "preview_token", "practice_date", "start_time", "end_time", "timezone", "location", "address", "optional map_url"],
       "response_fields": ["week", "practices", "practice", "view_status", "optional current_view"],
       "writes_data": true,
-      "notes": "Requires a fresh preview. Preserve signup queues and seating history; cancelled drafts remain tombstones, public cancellations remain visible. Invalidates any pending week confirmation."
+      "notes": "Requires a fresh preview. Preserves signup queues, private seat drafts and immutable published revisions. Invalidates any pending week confirmation."
     },
     "cancelPractice": {
       "methods": ["POST"],
@@ -350,10 +358,65 @@
       "request_fields": ["session_token", "season_id", "week_id", "practice_id", "week_version", "practice_version", "signup_version", "preview_token"],
       "response_fields": ["week", "practices", "practice", "view_status", "optional current_view"],
       "writes_data": true,
-      "notes": "Requires a fresh preview. Preserve signup queues and seating history; cancelled drafts remain tombstones, public cancellations remain visible. Invalidates any pending week confirmation."
+      "notes": "Requires a fresh preview. Preserves related operational rows as an internal tombstone for audit and recovery, but removes the practice from all public current and history projections and from the private season archive. Invalidates any pending week confirmation."
+    },
+    "historySeasons": {
+      "methods": ["GET"],
+      "authentication": "public",
+      "writes_data": false,
+      "request_fields": [],
+      "response_fields": ["seasons", "generated_at"],
+      "notes": "Lists published season honor-wall summaries grouped by archive year."
+    },
+    "seasonHistory": {
+      "methods": ["GET"],
+      "authentication": "public",
+      "writes_data": false,
+      "request_fields": ["season_id"],
+      "response_fields": ["season", "practices", "generated_at"],
+      "notes": "Returns uncancelled archived practice summaries for one published season."
+    },
+    "archivedPractice": {
+      "methods": ["GET"],
+      "authentication": "public",
+      "writes_data": false,
+      "request_fields": ["season_id", "practice_id"],
+      "response_fields": ["season", "practice", "seat_plan", "corrections", "history_version", "archived_at"],
+      "notes": "Returns one frozen public snapshot. Coach and Steerer are display-only and no member IDs are exposed."
+    },
+    "getArchiveManagement": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "writes_data": false,
+      "request_fields": ["session_token", "season_id"],
+      "response_fields": ["season", "archive_status", "season_archive", "annual_files", "practices", "can_retry", "generated_at"]
+    },
+    "retrySeasonArchive": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "writes_data": true,
+      "request_fields": ["session_token", "season_id"],
+      "response_fields": ["season", "archive_status", "season_archive", "annual_files", "practices", "can_retry", "generated_at"],
+      "notes": "Only COMPLETED or ARCHIVED seasons. Reuses verified annual file and tab mappings and safely resumes incomplete work."
+    },
+    "appendHistoryCorrection": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "writes_data": true,
+      "request_fields": ["session_token", "season_id", "practice_id", "history_version", "note"],
+      "response_fields": ["season_id", "practice_id", "correction_id", "history_version"],
+      "notes": "Appends one safe single-line note to an already published history snapshot. It never rewrites the frozen seat plan."
+    },
+    "listManagementAudit": {
+      "methods": ["POST"],
+      "authentication": "session_token",
+      "writes_data": false,
+      "request_fields": ["session_token", "season_id", "optional limit"],
+      "response_fields": ["season_id", "events", "generated_at"],
+      "notes": "Combines season and matching system audit events, newest first, with a maximum limit of 200."
     }
   },
-  "management_errors": ["COACH_CODE_INVALID", "LOGIN_RATE_LIMITED", "SESSION_INVALID", "SESSION_EXPIRED", "SESSION_REVOKED", "IDEMPOTENCY_CONFLICT", "SERVICE_BUSY", "CONFIGURATION_REQUIRED", "CONFIGURATION_ERROR", "RECOVERY_REQUIRED", "VERSION_CONFLICT", "SEASON_NOT_FOUND", "SEASON_NOT_OPEN", "BINDING_LOCKED"],
+  "management_errors": ["COACH_CODE_INVALID", "LOGIN_RATE_LIMITED", "SESSION_INVALID", "SESSION_EXPIRED", "SESSION_REVOKED", "IDEMPOTENCY_CONFLICT", "SERVICE_BUSY", "CONFIGURATION_REQUIRED", "CONFIGURATION_ERROR", "RECOVERY_REQUIRED", "VERSION_CONFLICT", "SEASON_NOT_FOUND", "SEASON_NOT_OPEN", "BINDING_LOCKED", "ARCHIVE_NOT_DUE", "HISTORY_NOT_READY", "HISTORY_NOT_FOUND"],
   "signup_errors": ["VERSION_CONFLICT", "PRACTICE_NOT_PUBLIC", "MEMBER_NOT_FOUND", "MEMBER_INACTIVE", "INVALID_PREFERENCE", "SIGNUP_EXISTS", "SIGNUP_NOT_ACTIVE", "SIGNUP_CLOSED", "PRACTICE_ENDED", "PRACTICE_CANCELLED", "SIGNUP_RATE_LIMITED", "ROLE_SIGNUP_CONFLICT"],
   "member_errors": ["MEMBER_HAS_ACTIVE_LINKS", "MEMBER_NOT_FOUND", "VERSION_CONFLICT"],
   "seating_errors": ["VERSION_CONFLICT", "PRACTICE_NOT_PUBLIC", "PRACTICE_CANCELLED", "INVALID_SEAT_PLAN", "ROLE_SIGNUP_CONFLICT", "SEAT_MEMBER_NOT_CONFIRMED", "SEAT_PLAN_INCOMPLETE", "PREFERENCE_ACK_REQUIRED", "SEAT_PLAN_FROZEN"],

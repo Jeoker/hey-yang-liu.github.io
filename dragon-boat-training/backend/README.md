@@ -16,6 +16,7 @@
 - `src/SignupActions.gs`：报名、候补、训练详情，以及报名变化与草稿／正式系统 revision 的同次可恢复写入。
 - `src/MemberActions.gs`：受保护名册、资料修正、默认偏好、启停、角色和船位关联检查，以及完成赛季最终更正所需读取。
 - `src/SeatingActions.gs`：排座工作区、完整草稿快照、角色、手动／系统 revision、最终更正及精确冻结快照。
+- `src/ArchiveActions.gs`：到期冻结、单场及整季私有快照、年度归档文件、公开荣誉墙、更正说明、归档健康与操作记录。
 - `src/TimeUtils.gs`：赛季时区、日历边界及本地训练时间解析。
 - `src/Setup.gs`：一次性初始化及新增／重置个人 Coach Code。
 - `src/appsscript.json`：V8 运行时配置。
@@ -23,7 +24,9 @@
 - `build.mjs`：按固定顺序生成可直接粘贴到网页编辑器的单文件构建结果；运行根目录 `npm run build:dragon-boat-backend`。
 - `../contracts/api-v1.json`：当前请求和响应契约。
 
-长期系统 Spreadsheet 包含 `Coaches`、`CoachSessions`、`SystemRequests`、`SystemAuditLog`、`Seasons` 和 `SystemSettings`。每季响应 Spreadsheet 包含名单、排期、训练及报名表，并使用 `SeatPlanCurrent` 保存当前草稿座位、`SeatPlanState` 保存角色和版本指针、`SeatPlanRevisions` 保存不可变正式版本、`PracticeFinalSnapshots` 保存到期冻结快照；既有赛季在首次使用 P3 能力时按需建立新增 Tab。Code 使用随机 salt 和服务端 secret 生成摘要；短期会话令牌带服务端签名，Sheet 只保存令牌摘要。重置 Code 会推进 `credential_version`，停用凭据或版本变化会让旧会话立即失效。
+长期系统 Spreadsheet 包含 `Coaches`、`CoachSessions`、`SystemRequests`、`SystemAuditLog`、`Seasons`、`SystemSettings`，以及 P4 的 `AnnualArchiveFiles`、`PracticeArchives`、`SeasonArchives`、`PublicHistoryIndex`、`HistoryCorrections`。每季响应 Spreadsheet 包含名单、排期、训练及报名表，并使用 `SeatPlanCurrent` 保存当前草稿座位、`SeatPlanState` 保存角色和版本指针、`SeatPlanRevisions` 保存不可变正式版本、`PracticeFinalSnapshots` 保存到期冻结快照；既有赛季在首次使用 P3 能力时按需建立新增 Tab。Code 使用随机 salt 和服务端 secret 生成摘要；短期会话令牌带服务端签名，Sheet 只保存令牌摘要。重置 Code 会推进 `credential_version`，停用凭据或版本变化会让旧会话立即失效。
+
+既有五分钟 `publishDueTrainingWeeks` 触发器同时扫描到期冻结和归档，不另建第二个周期任务。系统按训练年份自动创建并复用一个私有 `Dragon Boat Training Archive YYYY` Spreadsheet；取消训练不写入单场 Tab、整季快照或公开目录。整季私有快照核验后才把赛季标为 `ARCHIVED` 并发布荣誉墙。冻结后只允许通过受保护接口追加版本化更正说明，原座位快照不改写。
 
 报名与排座沿用同一 `Settings` 报名版本、服务器入队顺序和 `SystemRequests` 恢复协议。取消、换侧和自动递补在一次持锁事务中同步报名、草稿及必要的系统正式 revision；未发布草稿不会混入公开版本。提交顺序和恢复约束见[后端规格](../google-sheets-backend-spec.md#会话与写入一致性)。
 
@@ -39,7 +42,7 @@
    - `DRAGON_BOAT_INITIAL_COACH_NAME`
    - `DRAGON_BOAT_INITIAL_COACH_CODE`，长度 6 至 128 字符
    - 可选 `DRAGON_BOAT_SESSION_TTL_SECONDS`，允许 900 至 86400，默认 28800
-3. 将 `src/` 推送到测试 Apps Script 项目，运行 `setupDragonBoatP1` 并完成 Spreadsheet、Forms 和触发器授权。该函数包含 P0 初始化并幂等建立预约开放触发器；临时明文初始 Code 会自动删除。已有管理员且未提供新 Code 时可以安全重跑，不会轮换凭据或重复记录凭据事件。
+3. 将 `src/` 推送到测试 Apps Script 项目，运行 `setupDragonBoatP4` 并完成 Spreadsheet、Forms 和触发器授权。该函数包含 P0／P1 初始化，幂等建立预约开放触发器和 P4 系统 Tab；临时明文初始 Code 会自动删除。已有管理员且未提供新 Code 时可以安全重跑，不会轮换凭据或重复记录凭据事件。
 4. 将 Web App 设为以部署账号执行，并允许队员无需 Google 登录访问。前端保存当前公开 `/exec` 地址作为默认值，也可以用构建变量 `PUBLIC_DRAGON_BOAT_API_URL` 覆盖。
 5. 从实际 GitHub Pages 测试入口验证健康检查、Code 登录、受保护写入、重复请求、退出和过期会话。
 
@@ -53,11 +56,11 @@
 
 ## 验证边界
 
-根目录 `npm test` 覆盖 P0／P1 基线、P2 业务边界、未知结果重试、写后故障恢复、持锁 `flush` 顺序、请求内缓存隔离，以及 P3 草稿隔离、角色互斥、手动与系统 revision、报名联动、版本冲突、最终更正、精确冻结边界、自动保存后的动态控件解锁和公开／管理角色投影隔离。周生成的计划恢复已有专项回归，其他 P1 写入路径不能据此视为已通过全部中断测试。
+根目录 `npm test` 覆盖 P0／P1 基线、P2 业务边界、未知结果重试、写后故障恢复、持锁 `flush` 顺序、请求内缓存隔离，P3 草稿隔离、角色互斥、手动与系统 revision、报名联动、版本冲突、最终更正及精确冻结边界，以及 P4 的取消过滤、单场／整季快照、年度文件复用、公开字段隔离、更正说明和归档中断恢复。周生成的计划恢复已有专项回归，其他 P1 写入路径不能据此视为已通过全部中断测试。
 
 最新真实 Google／Pages 验收和测试数据收尾记录见[当前进度](../CURRENT-STATUS.md)、[P1 管理补齐验收](../tests/P1-MANAGEMENT-ACCEPTANCE.md)及[P3 验收报告](../tests/P3-ACCEPTANCE.md)。继续写入前必须重新核对当前服务器状态，不把历史清理记录当作持续不变的状态。
 
-[live-p1-management-acceptance.mjs](../tests/live-p1-management-acceptance.mjs) 是显式手动运行的 P1 真实脚本，只识别独立的 `P1 Management Acceptance 2026` 两名虚构成员。运行要求进程环境中的 `DBT_API_URL`、`DBT_COACH_CODE` 和 `--write-test-data`；默认模式拒绝复用已有的 9 月 21 日批次，不能清空记录以强行重跑。`--verify-retained-history` 只补验该批次保留的取消历史、改期后的截止及原请求重放。临时切换默认值后按归属和版本检查恢复，只取消自己创建的场次，保留报名、座位版本和审计。首次测试中的断言修正及实际通过范围见验收报告；不要把退出前的通过计数当作整轮成功。
+[live-p1-management-acceptance.mjs](../tests/live-p1-management-acceptance.mjs) 是显式手动运行的 P1 历史验收脚本，只识别独立的 `P1 Management Acceptance 2026` 两名虚构成员。运行要求进程环境中的 `DBT_API_URL`、`DBT_COACH_CODE` 和 `--write-test-data`；默认模式拒绝复用已有的 9 月 21 日批次，不能清空记录以强行重跑。P4 起取消训练不再公开，因此旧 `--verify-retained-history` 模式只对应 Version 12 及以前的历史证据，不可用于当前部署验收。临时切换默认值后按归属和版本检查恢复，只取消自己创建的场次，保留报名、座位版本和审计。首次测试中的断言修正及实际通过范围见验收报告；不要把退出前的通过计数当作整轮成功。
 
 [live-p2-acceptance.mjs](../tests/live-p2-acceptance.mjs) 是显式手动集成脚本，不随 `npm test` 执行。设置运行时环境变量 `DBT_API_URL` 后，从仓库根目录运行 `node dragon-boat-training/tests/live-p2-acceptance.mjs --write-test-data`；仅在隔离测试赛季、约定的虚构队员及初始空报名场次通过检查后写入。清理只取消本次运行创建、且 `queue_at` 与 `queue_sequence` 仍匹配的报名；不清空其他报名、不删除成员或审计，归属变化时停止并人工核对。脚本、文档及测试结果不得包含真实私有文件 ID 或凭据。
 

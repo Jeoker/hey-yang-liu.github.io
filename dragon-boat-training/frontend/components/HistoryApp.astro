@@ -1,0 +1,234 @@
+---
+import logoUrl from "../../assets/team-logo-placeholder.svg";
+import "../styles/app.css";
+import "../styles/seat-plan.css";
+import "../styles/history.css";
+
+const basePath = import.meta.env.BASE_URL.endsWith("/")
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`;
+const appPath = `${basePath}dragon-boat-training/`;
+const historyPath = `${appPath}history/`;
+const coachPath = `${appPath}coach/`;
+const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
+  || "https://script.google.com/macros/s/AKfycbw4c8mBbop9Qnq29nYQ_AtLembq1OHKt_nRjIv3EE9kw0DliTVM0lMY6svr8X0gcQW8/exec";
+---
+
+<div class="dragon-boat-app" data-history-app data-api-url={apiUrl} data-history-path={historyPath}>
+  <header class="dragon-boat-header dragon-boat-shell">
+    <a class="dragon-boat-brand" href={appPath} aria-label="Dragon Boat Training 首页">
+      <img src={logoUrl.src} alt="队伍 Logo 占位图" width="96" height="96" />
+      <span class="dragon-boat-brand-copy">
+        <span>Dragon Boat Training</span>
+        <small>Team training portal</small>
+      </span>
+    </a>
+    <nav class="dragon-boat-nav" aria-label="训练系统导航">
+      <a href={appPath}>本季训练</a>
+      <a href={historyPath} aria-current="page">过往赛季</a>
+      <a href={coachPath}>Coach Mode</a>
+    </nav>
+  </header>
+
+  <main class="dragon-boat-main dragon-boat-shell">
+    <p class="dragon-boat-kicker">队伍历史</p>
+    <h1 data-history-title>过往赛季荣誉墙</h1>
+    <p class="dragon-boat-lede" data-history-lede>这里保存已经归档的训练与最终座位表。页面只读，可以直接分享。</p>
+
+    <section class="dragon-boat-status-card" data-history-status-card aria-live="polite">
+      <div class="dragon-boat-status-heading">
+        <h2>历史资料</h2>
+        <span class="dragon-boat-status-badge" data-history-badge data-state="pending">正在读取</span>
+      </div>
+      <p class="dragon-boat-status-message" data-history-message>正在读取公开归档……</p>
+      <button type="button" class="dragon-boat-secondary-button" data-history-retry hidden>重新读取</button>
+    </section>
+
+    <section class="dragon-boat-history-list" data-history-list hidden aria-labelledby="history-list-title">
+      <div class="dragon-boat-section-heading">
+        <div>
+          <p class="dragon-boat-session-label">按年份浏览</p>
+          <h2 id="history-list-title">已归档赛季</h2>
+        </div>
+      </div>
+      <div data-history-years></div>
+      <p class="dragon-boat-empty-state" data-history-empty hidden>目前还没有公开归档的赛季。</p>
+    </section>
+
+    <section class="dragon-boat-history-season" data-history-season hidden aria-labelledby="history-season-title">
+      <p class="dragon-boat-session-label">赛季档案</p>
+      <h2 id="history-season-title" data-season-title></h2>
+      <p class="dragon-boat-history-meta" data-season-meta></p>
+      <div class="dragon-boat-history-cards" data-history-practices></div>
+    </section>
+
+    <section class="dragon-boat-history-detail" data-history-detail hidden aria-labelledby="history-practice-title">
+      <div class="dragon-boat-section-heading">
+        <div>
+          <p class="dragon-boat-session-label">训练荣誉墙</p>
+          <h2 id="history-practice-title" data-practice-title></h2>
+        </div>
+        <a class="dragon-boat-secondary-button dragon-boat-button-link" data-back-season>返回本赛季档案</a>
+      </div>
+      <p class="dragon-boat-history-meta" data-practice-meta></p>
+      <div class="dragon-boat-seat-plan-panel" data-history-seat-plan></div>
+      <section class="dragon-boat-history-corrections" data-history-corrections hidden>
+        <h3>归档后更正说明</h3>
+        <ul data-history-correction-list></ul>
+      </section>
+    </section>
+  </main>
+</div>
+
+<script>
+  import { DragonBoatApiClient, DragonBoatApiError } from "../lib/api-client.js";
+  import { groupHistorySeasons, historyHref, visibleHistoryPractices } from "../lib/history-view.js";
+  import { renderSeatPlan } from "../lib/seat-plan-view.js";
+
+  const root = document.querySelector<HTMLElement>("[data-history-app]");
+  const q = <T extends HTMLElement>(selector: string) => root?.querySelector<T>(selector) || null;
+  const apiUrl = root?.dataset.apiUrl || "";
+  const historyPath = root?.dataset.historyPath || "/dragon-boat-training/history/";
+  const statusCard = q<HTMLElement>("[data-history-status-card]");
+  const badge = q<HTMLElement>("[data-history-badge]");
+  const message = q<HTMLElement>("[data-history-message]");
+  const retry = q<HTMLButtonElement>("[data-history-retry]");
+  const historyList = q<HTMLElement>("[data-history-list]");
+  const years = q<HTMLElement>("[data-history-years]");
+  const empty = q<HTMLElement>("[data-history-empty]");
+  const seasonSection = q<HTMLElement>("[data-history-season]");
+  const seasonTitle = q<HTMLElement>("[data-season-title]");
+  const seasonMeta = q<HTMLElement>("[data-season-meta]");
+  const practiceCards = q<HTMLElement>("[data-history-practices]");
+  const detail = q<HTMLElement>("[data-history-detail]");
+  const practiceTitle = q<HTMLElement>("[data-practice-title]");
+  const practiceMeta = q<HTMLElement>("[data-practice-meta]");
+  const seatPlan = q<HTMLElement>("[data-history-seat-plan]");
+  const corrections = q<HTMLElement>("[data-history-corrections]");
+  const correctionList = q<HTMLElement>("[data-history-correction-list]");
+  const backSeason = q<HTMLAnchorElement>("[data-back-season]");
+  const query = new URL(window.location.href).searchParams;
+  const requestedSeason = query.get("season_id") || "";
+  const requestedPractice = query.get("practice_id") || "";
+  let client: DragonBoatApiClient | null = null;
+
+  function setStatus(state: "pending" | "ready" | "error", text: string) {
+    if (badge) { badge.dataset.state = state; badge.textContent = state === "ready" ? "已连接" : state === "error" ? "读取失败" : "正在读取"; }
+    if (message) message.textContent = text;
+    if (retry) retry.hidden = state !== "error";
+    if (statusCard) statusCard.hidden = state === "ready";
+  }
+
+  function dateOnly(value: string, timeZone: string) {
+    return new Intl.DateTimeFormat("zh-CN", { timeZone, year: "numeric", month: "long", day: "numeric" })
+      .format(new Date(`${value}T12:00:00Z`));
+  }
+
+  function dateTime(value: string, timeZone: string) {
+    return new Intl.DateTimeFormat("zh-CN", { timeZone, year: "numeric", month: "numeric", day: "numeric",
+      weekday: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  }
+
+  function renderDirectory(entries: any[]) {
+    if (!historyList || !years || !empty) return;
+    historyList.hidden = false;
+    years.replaceChildren();
+    const groups = groupHistorySeasons(entries);
+    empty.hidden = groups.length > 0;
+    groups.forEach((group) => {
+      const section = document.createElement("section");
+      section.className = "dragon-boat-history-year";
+      const title = document.createElement("h3");
+      title.textContent = group.year;
+      const cards = document.createElement("div");
+      cards.className = "dragon-boat-history-cards";
+      group.seasons.forEach((season: any) => {
+        const link = document.createElement("a");
+        link.className = "dragon-boat-history-card";
+        link.href = historyHref(historyPath, season.season_id);
+        const name = document.createElement("strong");
+        name.textContent = season.name;
+        const range = document.createElement("span");
+        range.textContent = `${season.start_date} 至 ${season.end_date} · ${season.practice_count} 次训练`;
+        link.append(name, range);
+        cards.append(link);
+      });
+      section.append(title, cards);
+      years.append(section);
+    });
+  }
+
+  function renderSeason(data: any) {
+    if (!seasonSection || !seasonTitle || !seasonMeta || !practiceCards) return;
+    seasonSection.hidden = false;
+    seasonTitle.textContent = data.season.name;
+    seasonMeta.textContent = `${dateOnly(data.season.start_date, data.season.timezone)} 至 ${dateOnly(data.season.end_date, data.season.timezone)} · ${data.season.timezone}`;
+    practiceCards.replaceChildren();
+    visibleHistoryPractices(data.practices).forEach((practice: any) => {
+      const link = document.createElement("a");
+      link.className = "dragon-boat-history-card";
+      link.href = historyHref(historyPath, data.season.season_id, practice.practice_id);
+      const title = document.createElement("strong");
+      title.textContent = dateTime(practice.start_at, practice.timezone);
+      const place = document.createElement("span");
+      place.textContent = `${practice.location} · ${practice.address}`;
+      const state = document.createElement("span");
+      state.textContent = practice.final_status === "FROZEN"
+        ? `最终座位表 Revision ${practice.published_revision}${practice.correction_count ? ` · ${practice.correction_count} 条更正说明` : ""}`
+        : "本次训练没有发布正式座位表";
+      link.append(title, place, state);
+      practiceCards.append(link);
+    });
+  }
+
+  function renderPractice(data: any) {
+    if (!detail || !practiceTitle || !practiceMeta || !seatPlan) return;
+    detail.hidden = false;
+    practiceTitle.textContent = dateTime(data.practice.start_at, data.practice.timezone);
+    practiceMeta.textContent = `${data.practice.location} · ${data.practice.address} · ${data.practice.timezone}`;
+    renderSeatPlan(seatPlan, data.seat_plan, { timeZone: data.practice.timezone });
+    if (backSeason) backSeason.href = historyHref(historyPath, data.season.season_id);
+    const notes = Array.isArray(data.corrections) ? data.corrections : [];
+    if (corrections && correctionList) {
+      corrections.hidden = !notes.length;
+      correctionList.replaceChildren(...notes.map((note: any) => {
+        const item = document.createElement("li");
+        const text = document.createElement("span");
+        text.textContent = note.note;
+        const time = document.createElement("time");
+        time.dateTime = note.created_at;
+        time.textContent = ` · ${dateTime(note.created_at, data.practice.timezone)}`;
+        item.append(text, time);
+        return item;
+      }));
+    }
+  }
+
+  async function load() {
+    if (!apiUrl) return setStatus("error", "训练服务地址尚未配置。");
+    if (requestedPractice && !requestedSeason) return setStatus("error", "历史训练链接缺少赛季编号。");
+    try {
+      client ||= new DragonBoatApiClient({ baseUrl: apiUrl, timeoutMs: 30000 });
+      setStatus("pending", "正在读取公开归档……");
+      const directory = await client.get("historySeasons");
+      renderDirectory(directory.data.seasons);
+      if (requestedSeason) {
+        const season = await client.get("seasonHistory", { season_id: requestedSeason });
+        renderSeason(season.data);
+      }
+      if (requestedPractice) {
+        const practice = await client.get("archivedPractice", {
+          season_id: requestedSeason, practice_id: requestedPractice
+        });
+        renderPractice(practice.data);
+      }
+      setStatus("ready", "已读取公开归档。");
+    } catch (error) {
+      const code = error instanceof DragonBoatApiError ? error.code : "UNKNOWN_ERROR";
+      setStatus("error", code === "HISTORY_NOT_FOUND" ? "没有找到这项公开归档。" : "历史资料暂时无法读取，请稍后重试。");
+    }
+  }
+
+  retry?.addEventListener("click", load);
+  load();
+</script>

@@ -238,7 +238,7 @@ test("version conflict refreshes state and requires another explicit confirmatio
   assert.equal(harness.element("member-select").disabled, false);
 });
 
-test("published cards distinguish cancelled and ended training before opening details", async () => {
+test("published cards defensively omit cancelled training and distinguish ended training", async () => {
   const harness = makeHarness({ publishedPractices: [
     { practice_id: "practice_cancelled", cancelled: true, location: "Cancelled Dock" },
     { practice_id: "practice_ended", end_at: "2000-09-10T00:00:00.000Z", location: "Ended Dock" },
@@ -246,8 +246,8 @@ test("published cards distinguish cancelled and ended training before opening de
   ] });
   await settled(() => harness.element("signup-status").textContent.includes("已读取最新报名情况"));
   const cards = harness.element("week-cards").children[0].children[1].children;
-  assert.equal(cards[0].children[1].textContent, "已取消 · 报名只读");
-  assert.equal(cards[1].children[1].textContent, "已结束 · 报名只读");
-  assert.equal(cards[2].children[1].textContent, "已发布 · 查看最新报名状态");
+  assert.equal(cards.length, 2);
+  assert.equal(cards[0].children[1].textContent, "已结束 · 报名只读");
+  assert.equal(cards[1].children[1].textContent, "已发布 · 查看最新报名状态");
   assert.ok(cards.every((card) => card.children.at(-1).textContent === "查看报名、候补与座位"));
 });

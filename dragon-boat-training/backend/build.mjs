@@ -13,6 +13,7 @@ const sourceOrder = [
   "ScheduleActions.gs",
   "ScheduleManagement.gs",
   "SeatingActions.gs",
+  "ArchiveActions.gs",
   "SignupActions.gs",
   "MemberActions.gs",
   "PublicActions.gs",

@@ -13,7 +13,7 @@ function handleDragonBoatRequest_(method, event) {
     var request = parseDragonBoatRequest_(method, event);
     requestId = request.request_id;
 
-    if (method === "GET" && ["health", "bootstrap", "members", "practice"].indexOf(request.action) < 0) {
+    if (method === "GET" && ["health", "bootstrap", "members", "practice", "historySeasons", "seasonHistory", "archivedPractice"].indexOf(request.action) < 0) {
       throw dragonBoatRequestError_(
         "METHOD_NOT_ALLOWED",
         "This action must be sent as a POST request."
@@ -29,6 +29,12 @@ function handleDragonBoatRequest_(method, event) {
         return dragonBoatSuccess_(publicMembers_(request), requestId);
       case "practice":
         return dragonBoatSuccess_(publicPractice_(request), requestId);
+      case "historySeasons":
+        return dragonBoatSuccess_(publicHistorySeasons_(), requestId);
+      case "seasonHistory":
+        return dragonBoatSuccess_(publicSeasonHistory_(request), requestId);
+      case "archivedPractice":
+        return dragonBoatSuccess_(publicArchivedPractice_(request), requestId);
       case "signup":
       case "signupByCoach":
       case "updateSignup":
@@ -46,6 +52,14 @@ function handleDragonBoatRequest_(method, event) {
         return dragonBoatSuccess_(saveSeatPlanDraft_(request), requestId);
       case "publishSeatPlan":
         return dragonBoatSuccess_(publishSeatPlan_(request), requestId);
+      case "getArchiveManagement":
+        return dragonBoatSuccess_(getArchiveManagement_(request), requestId);
+      case "retrySeasonArchive":
+        return dragonBoatSuccess_(retrySeasonArchive_(request), requestId);
+      case "appendHistoryCorrection":
+        return dragonBoatSuccess_(appendHistoryCorrection_(request), requestId);
+      case "listManagementAudit":
+        return dragonBoatSuccess_(listManagementAudit_(request), requestId);
       case "updateMember":
       case "restoreMemberName":
       case "setMemberStatus":

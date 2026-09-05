@@ -10,6 +10,7 @@ const basePath = import.meta.env.BASE_URL.endsWith("/")
   ? import.meta.env.BASE_URL
   : `${import.meta.env.BASE_URL}/`;
 const appPath = `${basePath}dragon-boat-training/`;
+const historyPath = `${appPath}history/`;
 const coachPath = `${appPath}coach/`;
 const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   || "https://script.google.com/macros/s/AKfycbw4c8mBbop9Qnq29nYQ_AtLembq1OHKt_nRjIv3EE9kw0DliTVM0lMY6svr8X0gcQW8/exec";
@@ -26,7 +27,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     </a>
     <nav class="dragon-boat-nav" aria-label="训练系统导航">
       <a href={appPath}>本季训练</a>
-      <button type="button" disabled title="将在历史阶段实现">过往赛季</button>
+      <a href={historyPath}>过往赛季</a>
       <a href={coachPath} aria-current="page">Coach Mode</a>
     </nav>
   </header>
@@ -312,6 +313,29 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
         </section>
       </section>
 
+      <details class="dragon-boat-management-block" data-archive-console>
+        <summary>归档、荣誉墙与操作记录</summary>
+        <p>年度归档文件由系统自动创建。取消的训练不会出现在这里；冻结后的事实修正通过说明追加，不改写最终座位快照。</p>
+        <div class="dragon-boat-button-row">
+          <button type="button" class="dragon-boat-secondary-button" data-archive-refresh>读取归档状态</button>
+          <button type="button" class="dragon-boat-secondary-button" data-archive-retry hidden>重试本季归档</button>
+          <button type="button" class="dragon-boat-secondary-button" data-audit-refresh>读取操作记录</button>
+        </div>
+        <p class="dragon-boat-form-status" data-archive-status aria-live="polite"></p>
+        <div data-archive-summary hidden>
+          <p data-archive-season></p>
+          <div class="dragon-boat-button-row" data-archive-files></div>
+          <ul class="dragon-boat-management-list" data-archive-practices></ul>
+          <form class="dragon-boat-form-grid" data-history-correction-form hidden>
+            <label>已归档训练<select name="practice_id" data-history-correction-practice required></select></label>
+            <label class="dragon-boat-field-wide">追加更正说明<input name="note" maxlength="1000" required placeholder="只追加事实说明，不改写冻结座位表" /></label>
+            <button type="submit" class="dragon-boat-primary-button">发布更正说明</button>
+          </form>
+        </div>
+        <p class="dragon-boat-form-status" data-audit-status aria-live="polite"></p>
+        <ol class="dragon-boat-management-list" data-audit-list></ol>
+      </details>
+
       <details class="dragon-boat-connectivity-panel">
         <summary>P0 连接诊断</summary>
         <p>这项测试只向系统审计日志写入一条无业务副作用的事件。</p>
@@ -436,6 +460,19 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const seatDraftGrid = q<HTMLElement>("[data-seat-draft-grid]");
   const seatPublished = q<HTMLElement>("[data-seat-published]");
   const seatWarnings = q<HTMLElement>("[data-seat-warnings]");
+  const archiveConsole = q<HTMLDetailsElement>("[data-archive-console]");
+  const archiveRefresh = q<HTMLButtonElement>("[data-archive-refresh]");
+  const archiveRetry = q<HTMLButtonElement>("[data-archive-retry]");
+  const archiveStatus = q<HTMLElement>("[data-archive-status]");
+  const archiveSummary = q<HTMLElement>("[data-archive-summary]");
+  const archiveSeason = q<HTMLElement>("[data-archive-season]");
+  const archiveFiles = q<HTMLElement>("[data-archive-files]");
+  const archivePractices = q<HTMLElement>("[data-archive-practices]");
+  const historyCorrectionForm = q<HTMLFormElement>("[data-history-correction-form]");
+  const historyCorrectionPractice = q<HTMLSelectElement>("[data-history-correction-practice]");
+  const auditRefresh = q<HTMLButtonElement>("[data-audit-refresh]");
+  const auditStatus = q<HTMLElement>("[data-audit-status]");
+  const auditList = q<HTMLOListElement>("[data-audit-list]");
   const seatUndo = q<HTMLButtonElement>("[data-seat-undo]");
   const seatReset = q<HTMLButtonElement>("[data-seat-reset]");
   const seatSave = q<HTMLButtonElement>("[data-seat-save]");
@@ -468,6 +505,8 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   let managedPractice: any = null;
   let membersFresh = false;
   let practiceFresh = false;
+  let archiveReadVersion = 0;
+  let auditReadVersion = 0;
   let p2Busy = false;
   let p2Refreshing = false;
   let p2Pending: { kind: "member" | "signup"; action: string; payload: Record<string, any>; requestId: string; accepted?: boolean; result?: any; draft?: any } | null = null;
@@ -540,6 +579,10 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       SEAT_PLAN_INCOMPLETE: "发布前必须为每一位已确认报名者安排一个船位。",
       PREFERENCE_ACK_REQUIRED: "草稿中有人被安排在与明确偏好不同的一侧，请核对后再次确认发布。",
       SEAT_PLAN_FROZEN: "训练结束已满 24 小时，最终座位表已经冻结。",
+      ARCHIVE_NOT_DUE: "本赛季尚未到结束日期，当前不需要整季归档。",
+      HISTORY_NOT_READY: "本赛季荣誉墙尚未发布。请先完成整季归档。",
+      HISTORY_NOT_FOUND: "找不到这场已归档训练，请刷新归档状态。",
+      RECOVERY_REQUIRED: "上一次归档操作需要恢复，请保留原请求并重试。",
       SEASON_NOT_OPEN: "赛季当前不可修改，请刷新赛季状态。",
       SERVICE_BUSY: "系统正在处理其他修改，请稍后使用同一请求重试。",
       NETWORK_ERROR: "暂时无法连接训练服务。",
@@ -570,6 +613,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     if (adminWeekList) adminWeekList.replaceChildren();
     if (templateRows) templateRows.replaceChildren();
     if (additionalWeek) additionalWeek.replaceChildren();
+    clearP4View();
     bindingForm?.reset();
     renderManagementRetry();
     setStatus(loginStatus, message, message ? state : "");
@@ -643,6 +687,146 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
     }));
   }
 
+  function archiveStateText(value: string) {
+    const labels: Record<string, string> = {
+      NOT_DUE: "尚未到期",
+      PENDING: "等待归档",
+      STARTED: "归档处理中",
+      SUCCEEDED: "私有归档已核验",
+      PRIVATE_ARCHIVED: "整季私有归档已核验",
+      PUBLISHED: "荣誉墙已发布",
+      ERROR: "归档失败"
+    };
+    return labels[value] || value || "未知";
+  }
+
+  function clearP4View() {
+    archiveReadVersion += 1;
+    auditReadVersion += 1;
+    if (archiveSummary) archiveSummary.hidden = true;
+    if (archiveRetry) archiveRetry.hidden = true;
+    if (archiveFiles) archiveFiles.replaceChildren();
+    if (archivePractices) archivePractices.replaceChildren();
+    if (historyCorrectionPractice) historyCorrectionPractice.replaceChildren();
+    if (historyCorrectionForm) {
+      historyCorrectionForm.reset();
+      historyCorrectionForm.hidden = true;
+    }
+    if (auditList) auditList.replaceChildren();
+    setStatus(archiveStatus, "");
+    setStatus(auditStatus, "");
+  }
+
+  function renderArchiveManagement(data: any) {
+    if (!archiveSummary) return;
+    archiveSummary.hidden = false;
+    const season = data?.season || {};
+    const seasonArchive = data?.season_archive;
+    if (archiveSeason) {
+      const completed = season.status === "ARCHIVED" ? " · 赛季已归档" : season.status === "COMPLETED" ? " · 赛季已结束" : "";
+      archiveSeason.textContent = `${season.name || season.season_id || "当前赛季"}：${archiveStateText(data.archive_status)}${completed}${seasonArchive?.last_error ? ` · ${seasonArchive.last_error}` : ""}`;
+    }
+    if (archiveRetry) {
+      archiveRetry.hidden = !data.can_retry || data.archive_status === "PUBLISHED";
+      archiveRetry.disabled = managementWriting;
+    }
+    if (archiveFiles) {
+      archiveFiles.replaceChildren(...(data.annual_files || []).map((file: any) => {
+        const link = document.createElement("a");
+        link.className = "dragon-boat-secondary-button";
+        link.href = file.spreadsheet_url;
+        link.target = "_blank";
+        link.rel = "noreferrer";
+        link.textContent = `${file.archive_year} 年私有归档 · ${archiveStateText(file.status)}`;
+        return link;
+      }));
+    }
+    const publishedPractices = (data.practices || []).filter((practice: any) => practice.history_published);
+    if (archivePractices) {
+      archivePractices.replaceChildren(...(data.practices || []).map((practice: any) => {
+        const item = document.createElement("li");
+        const label = document.createElement("strong");
+        label.textContent = new Date(practice.start_at).toLocaleString();
+        const detail = document.createElement("span");
+        detail.textContent = ` ${practice.location || "未填写地点"} · ${archiveStateText(practice.status)}${practice.history_published ? " · 荣誉墙已发布" : ""}${practice.corrections?.length ? ` · ${practice.corrections.length} 条更正` : ""}${practice.last_error ? ` · ${practice.last_error}` : ""}`;
+        item.append(label, detail);
+        if (practice.corrections?.length) {
+          const notes = document.createElement("ul");
+          notes.replaceChildren(...practice.corrections.map((correction: any) => {
+            const note = document.createElement("li");
+            note.textContent = `${new Date(correction.created_at).toLocaleString()}：${correction.note}`;
+            return note;
+          }));
+          item.append(notes);
+        }
+        return item;
+      }));
+    }
+    if (historyCorrectionPractice) {
+      historyCorrectionPractice.replaceChildren(...publishedPractices.map((practice: any) => {
+        const option = document.createElement("option");
+        option.value = practice.practice_id;
+        option.dataset.historyVersion = String(practice.history_version || 0);
+        option.textContent = `${new Date(practice.start_at).toLocaleString()} · ${practice.location || "未填写地点"}`;
+        return option;
+      }));
+    }
+    if (historyCorrectionForm) historyCorrectionForm.hidden = !publishedPractices.length;
+  }
+
+  async function loadArchiveManagement() {
+    const seasonId = seasonPicker?.value || "";
+    if (!client || !sessionToken || !seasonId) {
+      setStatus(archiveStatus, "请先在上方选择赛季。", "pending");
+      return;
+    }
+    const token = sessionToken;
+    const readVersion = ++archiveReadVersion;
+    if (archiveRefresh) archiveRefresh.disabled = true;
+    setStatus(archiveStatus, "正在读取归档状态……", "pending");
+    try {
+      const response = await client.post("getArchiveManagement", { session_token: token, season_id: seasonId });
+      if (token !== sessionToken || readVersion !== archiveReadVersion) return;
+      renderArchiveManagement(response.data);
+      setStatus(archiveStatus, `归档状态已更新：${new Date(response.data.generated_at).toLocaleString()}`, "ready");
+    } catch (error) {
+      if (token !== sessionToken || readVersion !== archiveReadVersion) return;
+      if (!protectedError(error)) setStatus(archiveStatus, messageForError(error), "error");
+    } finally {
+      if (readVersion === archiveReadVersion && archiveRefresh) archiveRefresh.disabled = false;
+    }
+  }
+
+  async function loadManagementAudit() {
+    const seasonId = seasonPicker?.value || "";
+    if (!client || !sessionToken || !seasonId) {
+      setStatus(auditStatus, "请先在上方选择赛季。", "pending");
+      return;
+    }
+    const token = sessionToken;
+    const readVersion = ++auditReadVersion;
+    if (auditRefresh) auditRefresh.disabled = true;
+    setStatus(auditStatus, "正在读取最近 100 条操作记录……", "pending");
+    try {
+      const response = await client.post("listManagementAudit", { session_token: token, season_id: seasonId, limit: 100 });
+      if (token !== sessionToken || readVersion !== auditReadVersion) return;
+      if (auditList) {
+        auditList.replaceChildren(...(response.data.events || []).map((event: any) => {
+          const item = document.createElement("li");
+          const actor = event.actor_id || event.actor_type || "SYSTEM";
+          item.textContent = `${new Date(event.server_time).toLocaleString()} · ${event.action} · ${event.status} · ${actor}`;
+          return item;
+        }));
+      }
+      setStatus(auditStatus, response.data.events?.length ? `已读取 ${response.data.events.length} 条操作记录。` : "本赛季暂无操作记录。", "ready");
+    } catch (error) {
+      if (token !== sessionToken || readVersion !== auditReadVersion) return;
+      if (!protectedError(error)) setStatus(auditStatus, messageForError(error), "error");
+    } finally {
+      if (readVersion === auditReadVersion && auditRefresh) auditRefresh.disabled = false;
+    }
+  }
+
   async function refreshBootstrap(preferredSeasonId = "") {
     if (!client || !sessionToken) return;
     setStatus(managementStatus, "正在读取赛季入口……", "pending");
@@ -677,6 +861,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   function clearSeasonView() {
     closeScheduleEditor();
     currentSeasonData = null;
+    clearP4View();
     if (seasonDetail) seasonDetail.hidden = true;
     if (bindingBlock) bindingBlock.hidden = true;
     if (activeSeasonBlock) activeSeasonBlock.hidden = true;
@@ -1840,7 +2025,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       schedulePreview = { input, data };
       const describe = (practice: any) => `${scheduleTime(practice.start_at, practice.timezone)} 至 ${scheduleTime(practice.end_at, practice.timezone)}（${practice.timezone}），${practice.location}，${practice.address}，地图：${practice.map_url || "无"}`;
       const effect = change === "CANCEL" ? (data.before.schedule_published_at
-        ? "取消后停止所有报名和排座操作，公开页面保留取消标记；报名与座位历史保留，不递补。"
+        ? "取消后停止所有报名和排座操作，并从公开训练、独立链接和荣誉墙中移除；运营表只保留最小取消标记与审计，不生成归档。"
         : "移除此私有场次，不向队员公开，重新生成本周也不会恢复它。")
         : `改为：${describe(data.after)}。报名截止：${scheduleTime(data.before.signup_cutoff_at, data.before.timezone)} → ${scheduleTime(data.after.signup_cutoff_at, data.after.timezone)}；截止重算可能提前关闭或重新开放报名。保留原报名、排队顺序和座位。`;
       setStatus(practiceChangeStatus, `当前：${describe(data.before)}。确认 ${data.confirmed_count} 人、候补 ${data.waitlisted_count} 人。${effect}${data.invalidates_week_confirmation ? " 本周预约将撤回，须重新确认开放。" : ""}`, "ready");
@@ -1957,10 +2142,10 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
         }
       }
       const practices = document.createElement("ul");
-      item.practices.forEach((practice: any) => {
+      item.practices.filter((practice: any) => !practice.cancelled && !practice.cancelled_at).forEach((practice: any) => {
         const line = document.createElement("li");
         const text = document.createElement("span");
-        text.textContent = `${scheduleTime(practice.start_at, practice.timezone)} 至 ${scheduleTime(practice.end_at, practice.timezone)} · ${practice.location} · ${practice.cancelled ? (practice.schedule_published_at ? "已取消（保留历史）" : "已移除（不公开）") : practice.schedule_published_at ? "已公开" : "私有草稿"}`;
+        text.textContent = `${scheduleTime(practice.start_at, practice.timezone)} 至 ${scheduleTime(practice.end_at, practice.timezone)} · ${practice.location} · ${practice.schedule_published_at ? "已公开" : "私有草稿"}`;
         line.append(text);
         if (!practice.cancelled && Date.parse(practice.start_at) > Date.now()) {
           const edit = document.createElement("button"); edit.type = "button";
@@ -2241,6 +2426,50 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       `seat-publish:${payload.practice_id}:${payload.seat_plan_version}:${payload.published_revision}`, seatEditSequence);
   });
 
+  archiveRefresh?.addEventListener("click", () => loadArchiveManagement());
+  archiveRetry?.addEventListener("click", async () => {
+    const seasonId = seasonPicker?.value || "";
+    if (!seasonId || managementWriting) return;
+    if (archiveRetry) archiveRetry.disabled = true;
+    setStatus(archiveStatus, "正在重试私有归档并核验荣誉墙发布……", "pending");
+    try {
+      const response = await managedPost("retrySeasonArchive", { season_id: seasonId }, `archive:${seasonId}`);
+      renderArchiveManagement(response.data);
+      await refreshBootstrap(seasonId);
+      if (archiveConsole) archiveConsole.open = true;
+      renderArchiveManagement(response.data);
+      setStatus(archiveStatus, "归档重试完成，请核对状态和年度文件。", "ready");
+    } catch (error) {
+      if (!protectedError(error)) setStatus(archiveStatus, messageForError(error), "error");
+    } finally {
+      if (archiveRetry) archiveRetry.disabled = false;
+    }
+  });
+  historyCorrectionForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const seasonId = seasonPicker?.value || "";
+    const selected = historyCorrectionPractice?.selectedOptions[0];
+    if (!seasonId || !selected || managementWriting) return;
+    const note = String(new FormData(historyCorrectionForm).get("note") || "").trim();
+    const practiceId = selected.value;
+    const historyVersion = Number(selected.dataset.historyVersion || 0);
+    setStatus(archiveStatus, "正在追加更正说明……", "pending");
+    try {
+      await managedPost("appendHistoryCorrection", {
+        season_id: seasonId,
+        practice_id: practiceId,
+        history_version: historyVersion,
+        note
+      }, `history-correction:${practiceId}:${historyVersion}`);
+      historyCorrectionForm.reset();
+      await loadArchiveManagement();
+      setStatus(archiveStatus, "更正说明已追加到荣誉墙，冻结座位快照保持不变。", "ready");
+    } catch (error) {
+      if (!protectedError(error)) setStatus(archiveStatus, messageForError(error), "error");
+    }
+  });
+  auditRefresh?.addEventListener("click", () => loadManagementAudit());
+
   loginForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!client || !codeInput || loginInProgress) return;
@@ -2322,6 +2551,14 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       const scheduleAction = ["updateSeasonSchedule", "setDefaultSeason", "updatePractice", "cancelPractice", "confirmTrainingWeek", "publishAdditionalPractice", "createPractice"].includes(request.action);
       if (scheduleAction) {
         if (applyScheduleResult(response.data, String(request.payload.season_id || ""))) setStatus(managementStatus, "原操作已确认成功，请核对结果。", "ready");
+        return;
+      }
+      if (["retrySeasonArchive", "appendHistoryCorrection"].includes(request.action)) {
+        const seasonId = String(request.payload.season_id || "");
+        await refreshBootstrap(seasonId);
+        if (archiveConsole) archiveConsole.open = true;
+        await loadArchiveManagement();
+        setStatus(managementStatus, "原归档操作已由服务器确认成功，请核对归档状态。", "ready");
         return;
       }
       await refreshBootstrap(response.data.season?.season_id || String(request.payload.season_id || ""));

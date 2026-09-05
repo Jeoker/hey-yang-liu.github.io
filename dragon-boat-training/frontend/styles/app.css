@@ -429,6 +429,18 @@ details.dragon-boat-management-block > summary,
 .dragon-boat-section-heading p,
 .dragon-boat-season-picker { color: var(--db-color-text-muted); line-height: 1.55; }
 
+.dragon-boat-management-list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.85rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--db-color-text-muted);
+  line-height: 1.5;
+}
+
+.dragon-boat-management-list li::marker { color: var(--db-color-primary); }
+.dragon-boat-management-list ul { margin-top: 0.35rem; }
+
 .dragon-boat-season-picker {
   display: flex;
   align-items: center;

@@ -1,0 +1,63 @@
+.dragon-boat-history-list,
+.dragon-boat-history-season,
+.dragon-boat-history-detail {
+  max-width: 58rem;
+  margin-top: 1.5rem;
+  border: 1px solid var(--db-color-border);
+  border-radius: var(--db-radius-panel);
+  padding: clamp(1.2rem, 4vw, 1.75rem);
+  background: var(--db-color-surface);
+  box-shadow: 0 1rem 2.5rem rgba(66, 93, 122, 0.07);
+}
+
+.dragon-boat-history-year + .dragon-boat-history-year { margin-top: 1.5rem; }
+.dragon-boat-history-year h3 { margin: 0 0 0.75rem; }
+
+.dragon-boat-history-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.dragon-boat-history-card {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid var(--db-color-border);
+  border-radius: var(--db-radius-control);
+  padding: 1rem;
+  color: var(--db-color-text);
+  background: var(--db-color-background);
+  text-decoration: none;
+}
+
+.dragon-boat-history-card:hover,
+.dragon-boat-history-card:focus-visible {
+  border-color: var(--db-color-primary);
+  outline: 3px solid var(--db-color-primary-soft);
+}
+
+.dragon-boat-history-card strong { color: var(--db-color-primary-strong); }
+.dragon-boat-history-card span { color: var(--db-color-text-muted); font-size: 0.84rem; line-height: 1.5; }
+.dragon-boat-history-season h2,
+.dragon-boat-history-detail h2 { margin: 0; }
+
+.dragon-boat-history-meta {
+  margin: 0.5rem 0 0;
+  color: var(--db-color-text-muted);
+  line-height: 1.65;
+}
+
+.dragon-boat-history-corrections {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--db-color-border);
+  padding-top: 1.25rem;
+}
+
+.dragon-boat-history-corrections h3 { margin: 0; }
+.dragon-boat-history-corrections ul { margin: 0.75rem 0 0; padding-left: 1.25rem; }
+.dragon-boat-history-corrections li { margin-top: 0.5rem; line-height: 1.6; }
+.dragon-boat-history-corrections time { color: var(--db-color-text-muted); font-size: 0.78rem; }
+
+@media (max-width: 42rem) {
+  .dragon-boat-history-cards { grid-template-columns: 1fr; }
+}

@@ -32,6 +32,15 @@ function setupDragonBoatP1() {
   return result;
 }
 
+function setupDragonBoatP4() {
+  var result = setupDragonBoatP1();
+  result.archive_status = withDragonBoatScriptLock_(function () {
+    ensureP4SystemSheets_();
+    return "ready";
+  });
+  return result;
+}
+
 function ensureDragonBoatScheduleTrigger_() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var index = 0; index < triggers.length; index += 1) {

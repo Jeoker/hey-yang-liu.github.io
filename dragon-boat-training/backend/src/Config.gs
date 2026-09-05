@@ -1,6 +1,6 @@
 var DRAGON_BOAT_CONTRACT_VERSION_ = "2026-09-02.p2.1";
 var DRAGON_BOAT_SERVICE_NAME_ = "dragon-boat-training";
-var DRAGON_BOAT_SERVICE_VERSION_ = "0.7.0-p1-management";
+var DRAGON_BOAT_SERVICE_VERSION_ = "0.8.0-p4";
 
 var DRAGON_BOAT_PROPERTY_KEYS_ = {
   SYSTEM_SPREADSHEET_ID: "DRAGON_BOAT_SYSTEM_SPREADSHEET_ID",
@@ -91,6 +91,78 @@ var DRAGON_BOAT_SHEET_HEADERS_ = {
     "settings_version",
     "updated_by",
     "updated_at"
+  ],
+  AnnualArchiveFiles: [
+    "archive_year",
+    "spreadsheet_id",
+    "status",
+    "creation_request_id",
+    "created_at",
+    "verified_at",
+    "updated_at",
+    "last_error"
+  ],
+  PracticeArchives: [
+    "archive_key",
+    "season_id",
+    "practice_id",
+    "archive_year",
+    "spreadsheet_id",
+    "sheet_name",
+    "snapshot_id",
+    "snapshot_digest",
+    "status",
+    "request_id",
+    "started_at",
+    "archived_at",
+    "updated_at",
+    "last_error"
+  ],
+  SeasonArchives: [
+    "season_id",
+    "archive_year",
+    "spreadsheet_id",
+    "sheet_name",
+    "snapshot_id",
+    "snapshot_digest",
+    "status",
+    "request_id",
+    "started_at",
+    "archived_at",
+    "published_at",
+    "updated_at",
+    "last_error"
+  ],
+  PublicHistoryIndex: [
+    "history_key",
+    "season_id",
+    "season_name",
+    "season_start_date",
+    "season_end_date",
+    "season_timezone",
+    "archive_year",
+    "practice_id",
+    "practice_start_at",
+    "practice_end_at",
+    "location",
+    "address",
+    "map_url",
+    "final_status",
+    "published_revision",
+    "published_at",
+    "public_snapshot_json",
+    "history_version",
+    "created_at",
+    "updated_at"
+  ],
+  HistoryCorrections: [
+    "correction_id",
+    "season_id",
+    "practice_id",
+    "note",
+    "created_by",
+    "created_at",
+    "request_id"
   ]
 };
 

@@ -175,6 +175,9 @@ function publicPractice_(request) {
   return withDragonBoatScriptLock_(function () {
     var season = requireSeason_(request.season_id);
     var practice = requirePublicPractice_(season, request.practice_id);
+    if (practice.cancelled_at) {
+      throw dragonBoatRequestError_("PRACTICE_NOT_PUBLIC", "The training is no longer available.");
+    }
     var state = getSignupState_(season, practice.practice_id);
     var rows = getPracticeSignups_(season, practice.practice_id).filter(function (row) {
       return row.status !== "CANCELLED";

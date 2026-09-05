@@ -22,7 +22,7 @@ function publicBootstrap_(request) {
   });
   if (season.runtime_spreadsheet_id) {
     published = getSeasonSheetRecords_(season, "Practices").filter(function (practice) {
-      return publicWeeks[practice.week_id] && Boolean(practice.schedule_published_at) &&
+      return !practice.cancelled_at && publicWeeks[practice.week_id] && Boolean(practice.schedule_published_at) &&
         Date.parse(String(practice.schedule_published_at)) <= Date.now();
     }).map(practiceProjection_).sort(function (left, right) {
       return left.start_at.localeCompare(right.start_at);

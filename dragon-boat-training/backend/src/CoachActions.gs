@@ -119,7 +119,7 @@ function coachBootstrap_(request) {
       { id: "training", label: "训练与排座", available: true },
       { id: "members", label: "队员", available: true },
       { id: "season", label: "赛季与表单", available: true },
-      { id: "audit", label: "操作记录", available: false }
+      { id: "audit", label: "操作记录", available: true }
     ],
     p0_connectivity_write_available: true,
     default_season_id: getDefaultSeasonId_(),

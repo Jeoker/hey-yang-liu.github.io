@@ -8,12 +8,13 @@ const basePath = import.meta.env.BASE_URL.endsWith("/")
   ? import.meta.env.BASE_URL
   : `${import.meta.env.BASE_URL}/`;
 const appPath = `${basePath}dragon-boat-training/`;
+const historyPath = `${appPath}history/`;
 const coachPath = `${appPath}coach/`;
 const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   || "https://script.google.com/macros/s/AKfycbw4c8mBbop9Qnq29nYQ_AtLembq1OHKt_nRjIv3EE9kw0DliTVM0lMY6svr8X0gcQW8/exec";
 ---
 
-<div class="dragon-boat-app" data-dragon-boat-app data-api-url={apiUrl}>
+<div class="dragon-boat-app" data-dragon-boat-app data-api-url={apiUrl} data-history-url={historyPath}>
   <header class="dragon-boat-header dragon-boat-shell">
     <a class="dragon-boat-brand" href={appPath} aria-label="Dragon Boat Training 首页">
       <img src={logoUrl.src} alt="队伍 Logo 占位图" width="96" height="96" />
@@ -25,7 +26,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
 
     <nav class="dragon-boat-nav" aria-label="训练系统导航">
       <a href={appPath} aria-current="page">本季训练</a>
-      <button type="button" disabled title="将在历史阶段实现">过往赛季</button>
+      <a href={historyPath}>过往赛季</a>
       <a href={coachPath}>Coach Mode</a>
     </nav>
   </header>
@@ -169,6 +170,7 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
   const weekCards = root?.querySelector<HTMLElement>("[data-week-cards]");
   const weekEmpty = root?.querySelector<HTMLElement>("[data-week-empty]");
   const apiUrl = root?.getAttribute("data-api-url")?.trim() || "";
+  const historyUrl = root?.getAttribute("data-history-url")?.trim() || "";
   const pageRetry = root?.querySelector<HTMLButtonElement>("[data-page-retry]");
   const practicePanel = root?.querySelector<HTMLElement>("[data-practice-panel]");
   const practiceTitle = root?.querySelector<HTMLElement>("[data-practice-title]");
@@ -265,16 +267,14 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       heading.textContent = `一周开始于 ${dateOnly(week.week_start_date, data.season.timezone)}`;
       const grid = document.createElement("div");
       grid.className = "dragon-boat-practice-grid";
-      week.practices.forEach((practice: any) => {
+      week.practices.filter((practice: any) => !practice.cancelled && !practice.cancelled_at).forEach((practice: any) => {
         const card = document.createElement("article");
         card.className = "dragon-boat-practice-card";
         const title = document.createElement("h4");
         title.textContent = dateTime(practice.start_at, practice.timezone);
         const state = document.createElement("span");
         state.className = "dragon-boat-practice-state";
-        state.textContent = practice.cancelled || practice.cancelled_at
-          ? "已取消 · 报名只读"
-          : Date.parse(practice.end_at) <= Date.now() + serverOffsetMs
+        state.textContent = Date.parse(practice.end_at) <= Date.now() + serverOffsetMs
             ? "已结束 · 报名只读"
             : data.season.status !== "OPEN" ? "赛季已结束 · 报名只读" : "已发布 · 查看最新报名状态";
         const time = document.createElement("span");
@@ -677,6 +677,13 @@ const apiUrl = import.meta.env.PUBLIC_DRAGON_BOAT_API_URL
       const serverTime = Date.parse(response.meta.server_time);
       if (Number.isFinite(serverTime)) serverOffsetMs = serverTime - Date.now();
       season = data.season;
+      if (data.state === "ARCHIVED" && data.season) {
+        const target = new URL(historyUrl, window.location.origin);
+        target.searchParams.set("season_id", data.season.season_id);
+        if (requestedPracticeId) target.searchParams.set("practice_id", requestedPracticeId);
+        window.location.replace(target);
+        return;
+      }
       if (defaultSeasonNotice) defaultSeasonNotice.hidden = !data.default_season_id || data.default_season_id === data.season?.season_id;
       showConnection("ready", "连接正常", "已读取最新公开训练计划。", `contract ${response.meta.contract_version}`);
       if (!data.season) {

@@ -70,7 +70,12 @@ test("setup creates a private system spreadsheet when no ID is configured", asyn
     "SystemRequests",
     "SystemAuditLog",
     "Seasons",
-    "SystemSettings"
+    "SystemSettings",
+    "AnnualArchiveFiles",
+    "PracticeArchives",
+    "SeasonArchives",
+    "PublicHistoryIndex",
+    "HistoryCorrections"
   ]);
 });
 
