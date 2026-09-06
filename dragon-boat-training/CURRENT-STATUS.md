@@ -8,10 +8,10 @@
 
 - **P1 管理补齐验收通过**：赛季日期／默认值、当周单场预览编辑与取消、开放前后加场、预约开放及精确完成状态已完成。真实 Google 触发器、页面内确认、双季公开结果与最终退出已验证；时间边界使用可控时钟。细节、验收中的修正和工具限制见[P1 管理补齐验收](tests/P1-MANAGEMENT-ACCEPTANCE.md)。P1 不再保留开发欠项。
 
-- P0、P1、P2“报名与维护”及 P2.1 等待体验优化已完成对应验收。**P3 阶段验收通过**：核心真实 API、页面流程及双窗口版本冲突恢复通过，用户已在正式 Coach Mode 人工确认鼠标拖动成功。**P4 阶段实现与当前可执行线上验收通过**：归档状态、取消过滤、公开历史空状态、受保护读取和退出已验证；尚未到期的测试赛季不能证明真实年度文件创建，留待首个隔离结束赛季补验。**P5 第一批性能与稳定性改进已在本地完成**，尚未部署或进行真实 Google 负载验收；P5 其余发布准备和三个 Epic 的整体交付仍未完成。
+- P0、P1、P2“报名与维护”及 P2.1 等待体验优化已完成对应验收。**P3 阶段验收通过**：核心真实 API、页面流程及双窗口版本冲突恢复通过，用户已在正式 Coach Mode 人工确认鼠标拖动成功。**P4 阶段实现与当前可执行线上验收通过**：归档状态、取消过滤、公开历史空状态、受保护读取和退出已验证；尚未到期的测试赛季不能证明真实年度文件创建，留待首个隔离结束赛季补验。**P5 第一批性能与稳定性改进已部署并通过基础生产冒烟测试**；长期 Google 负载、非空分页、Safari、实体手机和管理员交接仍未验收，三个 Epic 的整体交付尚未结束。
 - [队员页面](https://jeoker.github.io/hey-yang-liu.github.io/dragon-boat-training/)、[过往赛季](https://jeoker.github.io/hey-yang-liu.github.io/dragon-boat-training/history/)和 [Coach Mode](https://jeoker.github.io/hey-yang-liu.github.io/dragon-boat-training/coach/) 使用同一个 Apps Script 后端。GitHub Pages 只提供静态网页，Google Sheets 仍是唯一业务数据源，没有十分钟延迟写回或独立实时数据库。
-- 线上 Apps Script 沿用原 Web App URL，当前仍为 **Version 13、服务 `0.8.0-p4`**，契约保持 `2026-09-02.p2.1`。本地待部署源码为服务 `0.9.0-p5-performance`，契约版本不变，只增加向后兼容的分页字段。
-- P4 功能提交 **`401239c`** 的 [Pages run 33989665856](https://github.com/Jeoker/hey-yang-liu.github.io/actions/runs/33989665856) 成功；正式历史页、Coach 归档控制台和公开取消过滤已实际验收。
+- 线上 Apps Script 沿用原 Web App URL，当前为 **Version 14、服务 `0.9.0-p5-performance`**，契约保持 `2026-09-02.p2.1`。生产 `setupDragonBoatP4` 已幂等执行完成，`PublicHistorySeasons` 紧凑索引及维护触发器已建立或迁移。
+- P5 功能提交 **`38c9361`** 的 [Pages run 33999868687](https://github.com/Jeoker/hey-yang-liu.github.io/actions/runs/33999868687) 成功；三个正式页面均返回 HTTP 200，线上 HTML 与本地 P5 构建 SHA-256 一致。正式 health 返回 Version 14 的 `0.9.0-p5-performance`；公开历史空目录返回成功及分页字段。P4 的 [Pages run 33989665856](https://github.com/Jeoker/hey-yang-liu.github.io/actions/runs/33989665856) 继续作为上一阶段历史证据。
 - 本地 **159／159** 测试通过，Astro 检查为零诊断、静态构建生成四个页面，后端单文件构建通过。新增回归覆盖两秒合并保存、开放赛季单场按时冻结、归档工作量上限与断点续跑、审计分页的有界读取、历史分页与缓存、旧历史索引迁移、按行读取详情及批量投影写入。
 - Script ID、私有 Spreadsheet ID、Coach Code、会话令牌和服务端 secret 均不写入仓库。
 
@@ -42,7 +42,7 @@
 | P3 人工拖动验收 | 2026-09-04，用户明确反馈“鼠标拖动成功了”，并反馈 Member 13 代报名、移回待排座池操作正常。此为真实页面人工验收证据；自动化 drag 未触发的结果不改写成自动化通过，不据此声称已覆盖其他设备或浏览器 |
 | P4 后端与恢复 | 精确结束后 24 小时冻结、单场及整季私有归档、年度文件复用、公开字段隔离、更正说明、取消排除和两个中断恢复路径由可控时间与故障注入验证；Apps Script Version 13 的 health 和空历史目录真实读取通过 |
 | P4 正式页面 | Pages run 33989665856 成功；过往赛季空状态、Coach 归档控制台、当前开放赛季三场“尚未到期”状态、100 条受保护操作记录、退出和已取消测试赛季的公开空列表通过。未到期环境不等同于真实年度文件创建通过，见[P4 报告](tests/P4-ACCEPTANCE.md) |
-| P5 性能本地验收 | 159／159 回归及双构建通过；连续排座两秒合并、开放赛季按时冻结、审计与历史分页、公开历史缓存、紧凑索引、批量写入、归档工作量上限和断点续跑均有专项测试。尚未部署，不能据此声称真实 Google 延迟、配额或 Safari／实体手机已通过，见[P5 性能报告](tests/P5-PERFORMANCE-ACCEPTANCE.md) |
+| P5 性能与部署 | 159／159 回归及双构建通过；连续排座两秒合并、开放赛季按时冻结、审计与历史分页、公开历史缓存、紧凑索引、批量写入、归档工作量上限和断点续跑均有专项测试。Apps Script Version 14、生产初始化、health、公开历史空状态和 Pages 三页产物已验证；非空分页、长期 Google 延迟／配额及 Safari／实体手机仍待验收，见[P5 性能报告](tests/P5-PERFORMANCE-ACCEPTANCE.md) |
 
 完整 P3 场景、版本和验证层次见[P3 验收报告](tests/P3-ACCEPTANCE.md)。[P2](tests/live-p2-acceptance.mjs)和[P3](tests/live-p3-acceptance.mjs)真实脚本均为显式手动运行，不随 `npm test` 执行，不修改真实训练时间。运行限制见[后端说明](backend/README.md#验证边界)。
 
@@ -65,7 +65,7 @@ P1 本轮另建 `P1 Management Acceptance 2026`（2026-09-01 至 09-30，纽约�
 
 ## 未完成范围与下一步
 
-1. **P5 第一批待部署**：将本地 `0.9.0-p5-performance` 部署到原 Apps Script Web App，运行一次 `setupDragonBoatP4` 建立或迁移 `PublicHistorySeasons`，再发布 Pages。部署后核对 health、历史目录分页、Coach 审计分页、连续排座和一次归档维护结果；部署前线上仍按 Version 13／`0.8.0-p4` 运行。
+1. **P5 生产后续验收**：在不改动正式训练安排的前提下，用隔离数据补验非空历史“加载更多”、超过一页的 Coach 审计记录和一次跨轮归档维护；采集真实响应耗时、缓存命中和 Apps Script 配额趋势。两秒连续排座的人工作业验收应使用测试场次，结束后恢复其原草稿且不发布。
 2. **P4 延后实证边界**：等首个真实已结束的隔离赛季自然到期后，补验自动创建年度 Spreadsheet、单场 Tab、整季 Tab、荣誉墙详情和冻结后说明。不得为制造证据而缩短正式赛季或改写真实训练时间；该边界不阻塞 P4 当前功能交付。
 3. **P5 其余发布准备**：Safari、实体手机、真实 Google 长期配额／负载和管理员交接仍待执行。当前真实浏览器记录包括 Edge 和 Codex 内置浏览器；390×844 视口不等于实体手机验收。没有在 Google 表格中刻意制造断电；本地故障注入不代表全部写入均完成真实中断测试。正式赛季上线前需核对真实 Form 的匿名发布及回答接收权限，本轮新建测试 Form 的文件绑定检查不替代这一配置验收。
 
