@@ -8,9 +8,7 @@
     "build": "astro check && astro build",
     "preview": "astro preview",
     "check": "astro check",
-    "build:dragon-boat-backend": "node dragon-boat-training/backend/build.mjs",
-    "test": "npm run test:dragon-boat",
-    "test:dragon-boat": "node --test dragon-boat-training/tests/*.test.mjs"
+    "test": "astro check"
   },
   "dependencies": {
     "@tailwindcss/vite": "latest",
